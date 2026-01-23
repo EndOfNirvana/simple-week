@@ -19,7 +19,7 @@
 - **后端**：Express + tRPC
 - **数据库**：PostgreSQL (Neon)
 - **认证**：Clerk
-- **存储**：Cloudflare R2
+- **存储**：Supabase Storage
 - **部署**：Vercel
 
 ## 部署指南
@@ -31,7 +31,7 @@
 - [Vercel](https://vercel.com) - 用 GitHub 登录
 - [Neon](https://neon.tech) - 免费 PostgreSQL 数据库
 - [Clerk](https://clerk.com) - 用户认证服务
-- [Cloudflare](https://cloudflare.com) - R2 对象存储
+- [Supabase](https://supabase.com) - 图片存储
 
 ### 2. 配置 Neon 数据库
 
@@ -46,13 +46,14 @@
 3. 选择登录方式（推荐：Google、Email、Username）
 4. 复制 Publishable key 和 Secret key
 
-### 4. 配置 Cloudflare R2
+### 4. 配置 Supabase 存储
 
-1. 登录 Cloudflare 控制台
-2. 进入 R2 对象存储
-3. 创建存储桶，名称：`simple-week-images`
-4. 进入"管理 R2 API 令牌"，创建新令牌
-5. 复制 Account ID、Access Key ID、Secret Access Key
+1. 登录 Supabase 控制台
+2. 创建新项目
+3. 进入 Storage，创建名为 `images` 的**公开**存储桶
+4. 进入 Project Settings > API，复制：
+   - Project URL
+   - service_role key（点击 Reveal 显示）
 
 ### 5. 部署到 Vercel
 
@@ -61,16 +62,13 @@
 3. 选择您的 GitHub 仓库
 4. 在 Environment Variables 中添加以下变量：
 
-```
-DATABASE_URL=postgresql://...（Neon 连接字符串）
-CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_...（与 CLERK_PUBLISHABLE_KEY 相同）
-R2_ACCOUNT_ID=...
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
-R2_BUCKET_NAME=simple-week-images
-```
+| 变量名 | 值 |
+|--------|-----|
+| `DATABASE_URL` | Neon 连接字符串 |
+| `CLERK_SECRET_KEY` | Clerk Secret key |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk Publishable key |
+| `SUPABASE_URL` | Supabase Project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role key |
 
 5. 点击 Deploy
 
@@ -87,7 +85,8 @@ cd simple-week
 pnpm install
 
 # 设置环境变量（创建 .env 文件）
-echo "DATABASE_URL=你的Neon连接字符串" > .env
+cp .env.example .env
+# 编辑 .env 文件，填入您的配置
 
 # 推送数据库 schema
 pnpm db:push
@@ -100,7 +99,8 @@ pnpm db:push
 pnpm install
 
 # 创建 .env 文件并填入环境变量
-cp ENV_SETUP.md .env  # 然后编辑 .env 文件
+cp .env.example .env
+# 编辑 .env 文件
 
 # 推送数据库 schema
 pnpm db:push
@@ -109,11 +109,18 @@ pnpm db:push
 pnpm dev
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:5173（前端）和 http://localhost:3001（后端）
 
 ## 环境变量说明
 
-详见 [ENV_SETUP.md](./ENV_SETUP.md)
+| 变量名 | 必填 | 说明 |
+|--------|------|------|
+| `DATABASE_URL` | ✅ | Neon PostgreSQL 连接字符串 |
+| `CLERK_SECRET_KEY` | ✅ | Clerk 后端密钥 |
+| `VITE_CLERK_PUBLISHABLE_KEY` | ✅ | Clerk 前端公钥 |
+| `SUPABASE_URL` | ✅ | Supabase 项目 URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase 服务端密钥 |
+| `PORT` | ❌ | 服务器端口，默认 3001 |
 
 ## 许可证
 
