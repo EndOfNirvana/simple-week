@@ -4,11 +4,11 @@ export interface Task {
   id: number;
   userId: number;
   content: string;
-  completed: number; // 0 = false, 1 = true
+  completed: boolean;
   date: string; // YYYY-MM-DD
   timeBlock: TimeBlock;
   sortOrder: number;
-  createdAt: number;
+  createdAt: Date;
   updatedAt: Date;
 }
 
@@ -17,6 +17,6 @@ export interface Note {
   userId: number;
   weekId: string; // Format: YYYY-Www (e.g., 2026-W03)
   content: string | null;
-  createdAt: number;
+  createdAt: Date;
   updatedAt: Date;
 }

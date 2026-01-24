@@ -71,7 +71,7 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     );
   }
 
-  const isCompleted = task.completed === 1;
+  const isCompleted = task.completed;
 
   return (
     <div 

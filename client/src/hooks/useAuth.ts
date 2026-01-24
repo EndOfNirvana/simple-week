@@ -7,7 +7,7 @@ export function useAuth() {
   const { getToken } = useClerkAuth();
   
   // Get user data from our database
-  const { data: dbUser, isLoading: isDbLoading } = trpc.auth.me.useQuery(undefined, {
+  const { data: dbUser, isLoading: isDbLoading } = trpc.authentication.me.useQuery(undefined, {
     enabled: isSignedIn,
   });
 

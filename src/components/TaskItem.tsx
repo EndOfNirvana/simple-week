@@ -54,7 +54,7 @@ export function TaskItem({ task, onToggle, onDelete, onUpdate }: TaskItemProps) 
     );
   }
 
-  const isCompleted = task.completed === 1;
+  const isCompleted = task.completed;
 
   return (
     <div className="group flex items-start gap-2 py-1 text-sm animate-in fade-in duration-200">

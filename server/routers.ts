@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 const timeBlockSchema = z.enum(["morning", "afternoon", "evening"]);
 
 export const appRouter = router({
-  auth: router({
+  authentication: router({
     me: publicProcedure.query(opts => opts.ctx.user),
   }),
 
