@@ -11,7 +11,6 @@
   ],
   "functions": {
     "api/server.js": {
-      "runtime": "nodejs20.x",
       "maxDuration": 10
     }
   }
