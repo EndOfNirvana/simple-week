@@ -25,7 +25,7 @@ app.use(
 
 // Serve static files in production
 if (process.env.NODE_ENV === "production") {
-  const clientPath = path.join(__dirname, "..", "dist", "client");
+  const clientPath = path.join(__dirname, "..", "client");
   app.use(express.static(clientPath));
   
   // SPA fallback
@@ -42,7 +42,13 @@ if (process.env.NODE_ENV === "production") {
   app.use(vite.middlewares);
 }
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Export for Vercel Serverless Functions
+export default app;
+
+// Start server in non-serverless environment
+if (process.env.VERCEL !== "1") {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}

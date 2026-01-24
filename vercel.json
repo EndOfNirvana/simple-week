@@ -1,15 +1,18 @@
 {
   "buildCommand": "pnpm build",
-  "outputDirectory": "dist",
   "installCommand": "pnpm install",
   "framework": null,
+  "outputDirectory": "dist/client",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/client/$1" }
+    {
+      "source": "/api/trpc/:path*",
+      "destination": "/api/server"
+    }
   ],
   "functions": {
-    "api/**/*.ts": {
-      "runtime": "nodejs20.x"
+    "api/server.js": {
+      "runtime": "nodejs20.x",
+      "maxDuration": 10
     }
   }
 }
