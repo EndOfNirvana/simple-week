@@ -20,6 +20,7 @@ import {
 } from '../lib/date-utils';
 import { usePlannerStore } from '../hooks/usePlannerStore';
 import { DroppableTimeBlock } from './DroppableTimeBlock';
+import { YearWeekPicker } from './YearWeekPicker';
 import { CustomContentArea } from './CustomContentArea';
 import { ChevronLeft, ChevronRight, Loader2, Image as ImageIcon } from 'lucide-react';
 import { Button } from './ui/button';
@@ -44,6 +45,7 @@ export function WeeklyView() {
   const [localColumnWidths, setLocalColumnWidths] = useState<Record<number, number>>({});
   const [resizingColumn, setResizingColumn] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [showYearPicker, setShowYearPicker] = useState(false);
   const plannerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const resizeStartX = useRef(0);
@@ -271,6 +273,7 @@ export function WeeklyView() {
   const mobileColumnWidth = 130;
 
   return (
+    <>
     <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-background text-foreground font-sans">
       {/* Header */}
       <header className={cn(
@@ -278,12 +281,15 @@ export function WeeklyView() {
         isMobile ? "px-3 py-2 flex-wrap gap-2" : "px-6 py-4"
       )}>
         <div className="flex items-center gap-2 md:gap-4">
-          <h1 className={cn(
-            "font-bold tracking-tight text-primary",
-            isMobile ? "text-lg" : "text-2xl"
-          )}>
+          <button
+            onClick={() => setShowYearPicker(true)}
+            className={cn(
+              "font-bold tracking-tight text-primary hover:text-primary/80 transition-colors cursor-pointer",
+              isMobile ? "text-lg" : "text-2xl"
+            )}
+          >
             {formatWeekDisplay(currentDate)}
-          </h1>
+          </button>
           <span className={cn(
             "text-muted-foreground font-medium",
             isMobile ? "text-xs" : "text-sm"
@@ -554,5 +560,15 @@ export function WeeklyView() {
         </div>
       </div>
     </div>
+      
+      {/* Year Week Picker Modal */}
+      {showYearPicker && (
+        <YearWeekPicker
+          currentDate={currentDate}
+          onSelectWeek={(date) => setCurrentDate(date)}
+          onClose={() => setShowYearPicker(false)}
+        />
+      )}
+    </>
   );
 }
