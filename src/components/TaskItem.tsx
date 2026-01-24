@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Task } from '@/lib/types';
+import { Task } from '../lib/types';
 import { Check, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '../lib/utils';
 
 interface TaskItemProps {
   task: Task;

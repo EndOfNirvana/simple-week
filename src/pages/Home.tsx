@@ -1,6 +1,6 @@
 import { SignInButton, SignUpButton, UserButton, useUser } from "@clerk/clerk-react";
-import { WeeklyView } from '@/components/WeeklyView';
-import { Button } from "@/components/ui/button";
+import { WeeklyView } from '../components/WeeklyView';
+import { Button } from "../components/ui/button";
 
 export default function Home() {
   const { isSignedIn, isLoaded } = useUser();

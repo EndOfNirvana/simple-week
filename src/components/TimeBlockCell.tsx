@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Task, TimeBlock } from '@/lib/types';
+import { Task, TimeBlock } from '../lib/types';
 import { TaskItem } from './TaskItem';
 import { Plus } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '../lib/utils';
 
 interface TimeBlockCellProps {
   date: string;

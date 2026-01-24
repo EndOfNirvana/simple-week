@@ -1,5 +1,5 @@
 import { useUser, useClerk, useAuth as useClerkAuth } from "@clerk/clerk-react";
-import { trpc } from "@/lib/trpc";
+import { trpc } from "../lib/trpc";
 
 export function useAuth() {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser();

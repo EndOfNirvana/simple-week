@@ -1,5 +1,5 @@
-import { trpc } from '@/lib/trpc';
-import { TimeBlock } from '@/lib/types';
+import { trpc } from '../lib/trpc';
+import { TimeBlock } from '../lib/types';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { useMemo, useCallback } from 'react';
 

@@ -1,9 +1,9 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useState, useRef, useEffect } from 'react';
-import { Task } from '@/lib/types';
+import { Task } from '../lib/types';
 import { Check, Trash2, GripVertical } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '../lib/utils';
 
 interface DraggableTaskItemProps {
   task: Task;

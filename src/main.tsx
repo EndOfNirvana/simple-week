@@ -1,5 +1,5 @@
 import { ClerkProvider, useAuth } from "@clerk/clerk-react";
-import { trpc } from "@/lib/trpc";
+import { trpc } from "./lib/trpc";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";

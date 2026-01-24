@@ -17,17 +17,17 @@ import {
   getNextWeek, 
   getPrevWeek, 
   isToday
-} from '@/lib/date-utils';
-import { usePlannerStore } from '@/hooks/usePlannerStore';
+} from '../lib/date-utils';
+import { usePlannerStore } from '../hooks/usePlannerStore';
 import { DroppableTimeBlock } from './DroppableTimeBlock';
 import { CustomContentArea } from './CustomContentArea';
 import { ChevronLeft, ChevronRight, Loader2, Image as ImageIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Button } from './ui/button';
+import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { toPng } from 'html-to-image';
 import { toast } from 'sonner';
-import { Task, TimeBlock } from '@/lib/types';
+import { Task, TimeBlock } from '../lib/types';
 
 // Default widths
 const TIME_LABEL_WIDTH = 80;

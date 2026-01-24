@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Task, TimeBlock } from '@/lib/types';
+import { Task, TimeBlock } from '../lib/types';
 import { DraggableTaskItem } from './DraggableTaskItem';
 import { Plus } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '../lib/utils';
 
 interface DroppableTimeBlockProps {
   date: string;

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '../lib/utils';
 import { X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
