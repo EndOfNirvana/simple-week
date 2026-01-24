@@ -4,7 +4,8 @@
 
 **在线访问**: [https://simple-week.vercel.app](https://simple-week.vercel.app)
 
-![SimpleWeek 截图](https://raw.githubusercontent.com/EndOfNirvana/simple-week/master/screenshot.png)
+![SimpleWeek 截图](./screenshot.png)
+
 
 ## 核心功能
 
