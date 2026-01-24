@@ -1,16 +1,15 @@
+# Dependencies
 node_modules
+
+# Environment files
 .env
 .env.local
+
+# Logs
 *.log
+
+# OS files
 .DS_Store
-client/src
-server
-shared
-drizzle
-*.md
+
+# Git
 .git
-.gitignore
-tsconfig.json
-tsconfig.node.json
-vite.config.ts
-drizzle.config.ts
