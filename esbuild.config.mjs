@@ -1,4 +1,12 @@
 import * as esbuild from 'esbuild';
+import { readFileSync } from 'fs';
+
+// Read package.json to get all dependencies
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
+const allDeps = [
+  ...Object.keys(pkg.dependencies || {}),
+  ...Object.keys(pkg.devDependencies || {}),
+];
 
 await esbuild.build({
   entryPoints: ['server/index.ts'],
@@ -6,21 +14,8 @@ await esbuild.build({
   platform: 'node',
   format: 'esm',
   outdir: 'dist',
-  // Mark all node_modules as external to avoid bundling native modules
-  packages: 'external',
-  // But we need to bundle our own server code, so we use a plugin
-  plugins: [{
-    name: 'externalize-deps',
-    setup(build) {
-      // Mark all node_modules as external
-      build.onResolve({ filter: /^[^./]|^\.[^./]|^\.\.[^/]/ }, args => {
-        if (args.path.startsWith('.') || args.path.startsWith('/')) {
-          return null; // Let esbuild handle relative imports
-        }
-        return { path: args.path, external: true };
-      });
-    }
-  }],
+  // Externalize all dependencies from package.json
+  external: allDeps,
 });
 
 console.log('Server build complete!');
