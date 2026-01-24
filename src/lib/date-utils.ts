@@ -11,7 +11,7 @@ import {
   parseISO,
   startOfToday
 } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
+import { zhCN } from 'date-fns/locale/zh-CN';
 
 export const getWeekId = (date: Date): string => {
   const year = getYear(date);
