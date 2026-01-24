@@ -47,6 +47,7 @@ export function WeeklyView() {
   const [isMobile, setIsMobile] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
   const plannerRef = useRef<HTMLDivElement>(null);
+  const exportContainerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const resizeStartX = useRef(0);
   const resizeStartWidth = useRef(0);
@@ -235,18 +236,32 @@ export function WeeklyView() {
 
   // Export to image (desktop only)
   const handleExportImage = useCallback(async () => {
-    if (!plannerRef.current) return;
+    if (!exportContainerRef.current) return;
     
     toast.info('正在生成图片...');
     
     try {
-      const dataUrl = await toPng(plannerRef.current, {
+      // 临时隐藏不需要导出的元素
+      const buttonsToHide = exportContainerRef.current.querySelectorAll('[data-export-hide]');
+      buttonsToHide.forEach(el => (el as HTMLElement).style.visibility = 'hidden');
+      
+      const dataUrl = await toPng(exportContainerRef.current, {
         backgroundColor: '#ffffff',
         pixelRatio: 2,
         style: {
           transform: 'scale(1)',
+        },
+        filter: (node) => {
+          // 过滤掉带有 data-export-hide 属性的元素
+          if (node instanceof HTMLElement && node.hasAttribute('data-export-hide')) {
+            return false;
+          }
+          return true;
         }
       });
+      
+      // 恢复隐藏的元素
+      buttonsToHide.forEach(el => (el as HTMLElement).style.visibility = 'visible');
       
       const link = document.createElement('a');
       link.download = `周计划_${format(weekDays[0], 'yyyy-MM-dd')}.png`;
@@ -274,7 +289,7 @@ export function WeeklyView() {
 
   return (
     <>
-    <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-background text-foreground font-sans">
+    <div ref={exportContainerRef} className="flex flex-col h-screen max-h-screen overflow-hidden bg-background text-foreground font-sans">
       {/* Header */}
       <header className={cn(
         "flex items-center justify-between border-b border-border bg-background z-10",
@@ -330,7 +345,7 @@ export function WeeklyView() {
           </div>
         )}
         
-        <div className="flex items-center gap-1 md:gap-2 mr-12">
+        <div className="flex items-center gap-1 md:gap-2 mr-12" data-export-hide>
           {/* Desktop: Export button */}
           {!isMobile && (
             <Button 
