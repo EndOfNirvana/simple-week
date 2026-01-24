@@ -1,0 +1,48 @@
+# Vercel 环境变量配置模板
+# 
+# 在 Vercel Dashboard 中添加以下环境变量：
+# 1. 进入项目设置 → Environment Variables
+# 2. 逐个添加下面的变量
+# 3. 确保每个变量都应用于 Production、Preview 和 Development 环境
+
+# ===== 数据库配置 (Neon) =====
+DATABASE_URL=postgresql://username:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+
+# ===== 认证配置 (Clerk) =====
+CLERK_SECRET_KEY=sk_test_xxxxx
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxxxx
+
+# ===== 存储配置 (Supabase) =====
+SUPABASE_URL=https://xxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJxxxxx
+
+# ===== 环境标识 =====
+NODE_ENV=production
+
+# ===== 说明 =====
+# 
+# 如何获取这些值：
+# 
+# 1. DATABASE_URL (Neon)
+#    - 登录 https://console.neon.tech
+#    - 选择你的项目
+#    - 复制 Connection String
+#    - 确保包含 ?sslmode=require 参数
+# 
+# 2. CLERK_SECRET_KEY 和 VITE_CLERK_PUBLISHABLE_KEY (Clerk)
+#    - 登录 https://dashboard.clerk.com
+#    - 选择你的应用
+#    - 进入 API Keys
+#    - 复制 Secret Key 和 Publishable Key
+# 
+# 3. SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY (Supabase)
+#    - 登录 https://app.supabase.com
+#    - 选择你的项目
+#    - 进入 Project Settings → API
+#    - 复制 Project URL 和 service_role key
+# 
+# 注意事项：
+# - 不要在代码中硬编码这些密钥
+# - 不要将 .env 文件提交到 Git
+# - 定期轮换密钥以提高安全性
+# - service_role key 具有管理员权限，务必保密

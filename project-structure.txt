@@ -1,0 +1,45 @@
+.
+├── .env.example
+├── .gitignore
+├── .vercelignore
+├── DEPLOYMENT_CHECKLIST.md
+├── DEPLOYMENT_SUMMARY.md
+├── QUICK_START.md
+├── README.md
+├── VERCEL_DEPLOYMENT.md
+├── api
+│   └── server.js
+├── client
+│   ├── index.html
+│   ├── public
+│   └── src
+├── components.json
+├── deploy.sh
+├── drizzle
+│   ├── 0000_mushy_roxanne_simpson.sql
+│   ├── 0001_aromatic_gamora.sql
+│   ├── 0002_easy_glorian.sql
+│   ├── 0003_fixed_omega_flight.sql
+│   ├── relations.ts
+│   └── schema.ts
+├── drizzle.config.ts
+├── package.json
+├── pnpm-lock.yaml
+├── project-structure.txt
+├── server
+│   ├── context.ts
+│   ├── db.ts
+│   ├── index.ts
+│   ├── routers.ts
+│   ├── storage.ts
+│   └── trpc.ts
+├── shared
+│   ├── const.ts
+│   └── types.ts
+├── tsconfig.json
+├── tsconfig.node.json
+├── vercel-env-template.txt
+├── vercel.json
+└── vite.config.ts
+
+7 directories, 35 files
