@@ -40,11 +40,14 @@ export function DroppableTimeBlock({
   }, [isAdding]);
 
   const handleAdd = () => {
-    if (newValue.trim()) {
-      onAddTask(newValue.trim(), date, timeBlock);
+    const trimmedValue = newValue.trim();
+    if (trimmedValue) {
+      onAddTask(trimmedValue, date, timeBlock);
       setNewValue('');
-      inputRef.current?.focus();
+      // Keep input open for continuous adding
+      setTimeout(() => inputRef.current?.focus(), 0);
     } else {
+      setNewValue('');
       setIsAdding(false);
     }
   };

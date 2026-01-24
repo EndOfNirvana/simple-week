@@ -324,7 +324,7 @@ export function WeeklyView() {
           </div>
         )}
         
-        <div className="flex items-center gap-1 md:gap-2">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
           {/* Desktop: Export button */}
           {!isMobile && (
             <Button 
@@ -339,18 +339,20 @@ export function WeeklyView() {
           )}
           <Button 
             variant="outline" 
-            size={isMobile ? "sm" : "sm"} 
+            size="sm" 
             onClick={scrollToToday}
-            className={isMobile ? "text-xs px-2" : ""}
+            className={isMobile ? "text-xs px-3" : "px-4"}
           >
             今天
           </Button>
-          <Button variant="ghost" size="icon" onClick={handlePrevWeek} className={isMobile ? "h-8 w-8" : ""}>
-            <ChevronLeft className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleNextWeek} className={isMobile ? "h-8 w-8" : ""}>
-            <ChevronRight className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
-          </Button>
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" onClick={handlePrevWeek} className={isMobile ? "h-8 w-8" : "h-9 w-9"}>
+              <ChevronLeft className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleNextWeek} className={isMobile ? "h-8 w-8" : "h-9 w-9"}>
+              <ChevronRight className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
+            </Button>
+          </div>
         </div>
       </header>
 

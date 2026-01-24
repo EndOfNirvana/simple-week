@@ -1,6 +1,6 @@
 import { trpc } from '@/lib/trpc';
 import { TimeBlock } from '@/lib/types';
-import { format, startOfWeek, endOfWeek } from 'date-fns';
+import { format, startOfWeek, endOfWeek, getISOWeek, getYear } from 'date-fns';
 import { useMemo, useCallback } from 'react';
 
 // Default column width
@@ -13,12 +13,9 @@ export function usePlannerStore(currentDate: Date) {
   const startDate = format(weekStart, 'yyyy-MM-dd');
   const endDate = format(weekEnd, 'yyyy-MM-dd');
   
-  // Get week ID for notes
-  const year = currentDate.getFullYear();
-  const weekNumber = Math.ceil(
-    ((currentDate.getTime() - new Date(year, 0, 1).getTime()) / 86400000 + 
-    new Date(year, 0, 1).getDay() + 1) / 7
-  );
+  // Get week ID for notes - use ISO week number for consistency
+  const year = getYear(weekStart);
+  const weekNumber = getISOWeek(weekStart);
   const weekId = `${year}-W${weekNumber.toString().padStart(2, '0')}`;
 
   // Queries
