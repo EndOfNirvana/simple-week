@@ -1,7 +1,12 @@
 import { inferAsyncReturnType } from "@trpc/server";
 import { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import { clerkClient } from "@clerk/express";
+import { verifyToken, createClerkClient } from "@clerk/express";
 import { getUserByClerkId, upsertUser } from "./db";
+
+// Create Clerk client
+const clerkClient = createClerkClient({
+  secretKey: process.env.CLERK_SECRET_KEY,
+});
 
 export async function createContext({ req, res }: CreateExpressContextOptions) {
   // Get the session token from the Authorization header
@@ -12,14 +17,14 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
 
   if (sessionToken) {
     try {
-      // Verify the session with Clerk
-      const session = await clerkClient.sessions.verifySession(
-        req.headers["x-clerk-session-id"] as string,
-        sessionToken
-      );
+      // Verify the JWT token directly
+      const verifiedToken = await verifyToken(sessionToken, {
+        secretKey: process.env.CLERK_SECRET_KEY,
+      });
 
-      if (session) {
-        const clerkUser = await clerkClient.users.getUser(session.userId);
+      if (verifiedToken && verifiedToken.sub) {
+        // Get user from Clerk
+        const clerkUser = await clerkClient.users.getUser(verifiedToken.sub);
         
         // Upsert user in our database
         await upsertUser({
