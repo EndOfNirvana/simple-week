@@ -324,7 +324,7 @@ export function WeeklyView() {
           </div>
         )}
         
-        <div className="flex items-center gap-1 md:gap-2">
+        <div className="flex items-center gap-1 md:gap-2 mr-12">
           {/* Desktop: Export button */}
           {!isMobile && (
             <Button 
