@@ -276,7 +276,7 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
                     </span>
                   </div>
                   {/* Content textarea */}
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <textarea
                       value={content}
                       onChange={(e) => handleDailyEntryChange(index, e.target.value)}
@@ -287,7 +287,7 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
                         "border border-transparent rounded-md p-2",
                         "hover:border-border focus:border-primary/50 transition-colors",
                         "placeholder:text-muted-foreground/30",
-                        "min-h-[40px]"
+                        "min-h-[40px] break-words whitespace-pre-wrap"
                       )}
                       rows={1}
                       onInput={(e) => {
