@@ -550,15 +550,22 @@ export function WeeklyView() {
               {/* Right: Notes - desktop only */}
               {!isMobile && (
                 <div 
-                  className="bg-secondary/5 p-4 shrink-0"
+                  className="bg-secondary/5 shrink-0 cursor-text"
                   style={{ width: NOTES_WIDTH }}
+                  onClick={(e) => {
+                    // Click anywhere in the notes area to focus the textarea
+                    const textarea = (e.currentTarget as HTMLDivElement).querySelector('textarea');
+                    if (textarea) {
+                      textarea.focus();
+                    }
+                  }}
                 >
                   <textarea
                     value={noteContent}
                     onChange={(e) => setNoteContent(e.target.value)}
                     onBlur={handleNoteBlur}
                     placeholder="本周备注..."
-                    className="w-full h-full bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground/50"
+                    className="w-full h-full p-4 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground/50 block"
                   />
                 </div>
               )}

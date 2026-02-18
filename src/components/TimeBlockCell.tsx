@@ -25,29 +25,50 @@ export function TimeBlockCell({
 }: TimeBlockCellProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [newValue, setNewValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isAdding && inputRef.current) {
-      inputRef.current.focus();
+    if (isAdding && textareaRef.current) {
+      textareaRef.current.focus();
     }
   }, [isAdding]);
+
+  const autoResize = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  };
 
   const handleAdd = () => {
     if (newValue.trim()) {
       onAddTask(newValue.trim(), date, timeBlock);
       setNewValue('');
-      // Keep adding mode if needed, or close it. 
-      // For efficiency, let's keep focus to add multiple tasks
-      inputRef.current?.focus();
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+      textareaRef.current?.focus();
     } else {
       setIsAdding(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      const target = e.target as HTMLTextAreaElement;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const val = newValue.substring(0, start) + '\n' + newValue.substring(end);
+      setNewValue(val);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.selectionStart = start + 1;
+          textareaRef.current.selectionEnd = start + 1;
+          autoResize(textareaRef.current);
+        }
+      }, 0);
+    } else if (e.key === 'Enter' && !e.ctrlKey) {
+      e.preventDefault();
       handleAdd();
     } else if (e.key === 'Escape') {
       setNewValue('');
@@ -81,16 +102,19 @@ export function TimeBlockCell({
         ))}
         
         {isAdding ? (
-          <div className="flex items-center gap-2 p-1 -ml-1 animate-in fade-in duration-200">
-            <div className="h-4 w-4 border border-dashed border-muted-foreground/50 shrink-0" />
-            <input
-              ref={inputRef}
+          <div className="flex items-start gap-2 p-1 -ml-1 animate-in fade-in duration-200">
+            <textarea
+              ref={textareaRef}
               value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
+              onChange={(e) => {
+                setNewValue(e.target.value);
+                autoResize(e.target);
+              }}
               onBlur={handleAdd}
               onKeyDown={handleKeyDown}
-              placeholder="输入任务..."
-              className="flex-1 bg-transparent border-b border-primary outline-none text-sm"
+              placeholder="输入任务... (Ctrl+Enter换行)"
+              rows={1}
+              className="flex-1 bg-transparent border-b border-primary outline-none text-sm resize-none overflow-hidden leading-tight"
             />
           </div>
         ) : (

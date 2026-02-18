@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useState, useRef, useEffect } from 'react';
 import { Task } from '../lib/types';
-import { Check, Trash2, GripVertical } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface DraggableTaskItemProps {
@@ -15,7 +15,7 @@ interface DraggableTaskItemProps {
 export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: DraggableTaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(task.content);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const {
     attributes,
@@ -33,10 +33,27 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
   };
 
   useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      // Move cursor to end
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+      // Auto-resize
+      autoResize(textareaRef.current);
     }
   }, [isEditing]);
+
+  // Sync editValue when task.content changes externally
+  useEffect(() => {
+    if (!isEditing) {
+      setEditValue(task.content);
+    }
+  }, [task.content, isEditing]);
+
+  const autoResize = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  };
 
   const handleSave = () => {
     if (editValue.trim()) {
@@ -47,8 +64,26 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     setIsEditing(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      // Ctrl+Enter: insert newline
+      e.preventDefault();
+      const target = e.target as HTMLTextAreaElement;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const newValue = editValue.substring(0, start) + '\n' + editValue.substring(end);
+      setEditValue(newValue);
+      // Set cursor position after React re-render
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.selectionStart = start + 1;
+          textareaRef.current.selectionEnd = start + 1;
+          autoResize(textareaRef.current);
+        }
+      }, 0);
+    } else if (e.key === 'Enter' && !e.ctrlKey) {
+      // Enter alone: save
+      e.preventDefault();
       handleSave();
     } else if (e.key === 'Escape') {
       setEditValue(task.content);
@@ -56,16 +91,31 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     }
   };
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onToggle(task.id);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(true);
+  };
+
   if (isEditing) {
     return (
-      <div className="flex items-center gap-2 p-1 -ml-1">
-        <input
-          ref={inputRef}
+      <div className="flex items-start gap-1 p-1 -ml-1">
+        <textarea
+          ref={textareaRef}
           value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
+          onChange={(e) => {
+            setEditValue(e.target.value);
+            autoResize(e.target);
+          }}
           onBlur={handleSave}
           onKeyDown={handleKeyDown}
-          className="flex-1 bg-transparent border-b border-primary outline-none text-sm font-medium"
+          rows={1}
+          className="flex-1 bg-transparent border-b border-primary outline-none text-sm font-medium resize-none overflow-hidden leading-tight"
         />
       </div>
     );
@@ -77,32 +127,15 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     <div 
       ref={setNodeRef} 
       style={style}
-      className="group flex items-start gap-1 py-1 text-sm animate-in fade-in duration-200"
+      {...attributes}
+      {...listeners}
+      className="group flex items-start gap-1 py-1 text-sm animate-in fade-in duration-200 cursor-grab active:cursor-grabbing"
     >
-      <button
-        {...attributes}
-        {...listeners}
-        className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground/30 hover:text-muted-foreground transition-colors"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      
-      <button
-        onClick={() => onToggle(task.id)}
-        className={cn(
-          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border transition-colors hover:bg-accent",
-          isCompleted 
-            ? "bg-primary border-primary text-primary-foreground" 
-            : "border-input bg-transparent"
-        )}
-      >
-        {isCompleted && <Check className="h-3 w-3" />}
-      </button>
-      
       <span 
-        onClick={() => setIsEditing(true)}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         className={cn(
-          "flex-1 cursor-text break-all whitespace-pre-wrap leading-tight transition-opacity min-w-0",
+          "flex-1 cursor-text break-all whitespace-pre-wrap leading-tight transition-opacity min-w-0 select-none",
           isCompleted && "line-through text-muted-foreground opacity-60"
         )}
       >
@@ -110,8 +143,11 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
       </span>
 
       <button
-        onClick={() => onDelete(task.id)}
-        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10 p-0.5 rounded"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(task.id);
+        }}
+        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10 p-0.5 rounded shrink-0"
       >
         <Trash2 className="h-3 w-3" />
       </button>
