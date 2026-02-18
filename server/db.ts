@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, and, asc } from "drizzle-orm";
 import pg from "pg";
-import { users, tasks, notes, weekSettings, Task, Note, WeekSettings } from "../drizzle/schema";
+import { users, tasks, notes, weekSettings, weeklySummaries, Task, Note, WeekSettings, WeeklySummary } from "../drizzle/schema";
 
 const { Pool } = pg;
 
@@ -179,6 +179,54 @@ export async function upsertWeekSettings(
         weekId,
         columnWidths: columnWidthsJson,
         rowHeights: rowHeightsJson,
+      })
+      .returning();
+    return result[0];
+  }
+}
+
+// ============ Weekly Summary Operations ============
+
+export async function getWeeklySummary(userId: number, weekId: string): Promise<WeeklySummary | null> {
+  const [summary] = await db.select()
+    .from(weeklySummaries)
+    .where(and(eq(weeklySummaries.userId, userId), eq(weeklySummaries.weekId, weekId)))
+    .limit(1);
+  return summary || null;
+}
+
+export async function upsertWeeklySummary(
+  userId: number,
+  weekId: string,
+  data: {
+    keyword?: string | null;
+    dailyEntries?: string | null;
+    reflection?: string | null;
+  }
+): Promise<WeeklySummary> {
+  const existing = await getWeeklySummary(userId, weekId);
+
+  if (existing) {
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.keyword !== undefined) updateData.keyword = data.keyword;
+    if (data.dailyEntries !== undefined) updateData.dailyEntries = data.dailyEntries;
+    if (data.reflection !== undefined) updateData.reflection = data.reflection;
+
+    const result = await db
+      .update(weeklySummaries)
+      .set(updateData)
+      .where(eq(weeklySummaries.id, existing.id))
+      .returning();
+    return result[0];
+  } else {
+    const result = await db
+      .insert(weeklySummaries)
+      .values({
+        userId,
+        weekId,
+        keyword: data.keyword ?? null,
+        dailyEntries: data.dailyEntries ?? null,
+        reflection: data.reflection ?? null,
       })
       .returning();
     return result[0];

@@ -97,3 +97,27 @@ export const weekSettings = pgTable("week_settings", {
 
 export type WeekSettings = typeof weekSettings.$inferSelect;
 export type InsertWeekSettings = typeof weekSettings.$inferInsert;
+
+/**
+ * Weekly summaries table - stores weekly summary/journal entries
+ */
+export const weeklySummaries = pgTable("weekly_summaries", {
+  id: serial("id").primaryKey(),
+  /** User who owns this summary */
+  userId: integer("user_id").notNull(),
+  /** Week identifier (YYYY-Www format, e.g., 2026-W07) */
+  weekId: varchar("week_id", { length: 10 }).notNull(),
+  /** Keyword/title for the week (e.g., "大爷去世") */
+  keyword: text("keyword"),
+  /** Daily entries as JSON string: {"0": "周一内容", "1": "周二内容", ...} */
+  dailyEntries: text("daily_entries"),
+  /** Weekly reflection/summary text */
+  reflection: text("reflection"),
+  /** Creation timestamp */
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  /** Last update timestamp */
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type WeeklySummary = typeof weeklySummaries.$inferSelect;
+export type InsertWeeklySummary = typeof weeklySummaries.$inferInsert;

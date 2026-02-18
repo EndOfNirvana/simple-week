@@ -1,6 +1,6 @@
 import { publicProcedure, protectedProcedure, router } from "./trpc";
 import { z } from "zod";
-import { getTasksForWeek, createTask, updateTask, deleteTask, getNoteForWeek, upsertNote, getWeekSettings, upsertWeekSettings, updateCustomContent } from "./db";
+import { getTasksForWeek, createTask, updateTask, deleteTask, getNoteForWeek, upsertNote, getWeekSettings, upsertWeekSettings, updateCustomContent, getWeeklySummary, upsertWeeklySummary } from "./db";
 import { uploadToR2 } from "./storage";
 import { nanoid } from "nanoid";
 
@@ -81,6 +81,29 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         return upsertNote(ctx.user.id, input.weekId, input.content);
+      }),
+  }),
+
+  // Weekly summary operations
+  weeklySummary: router({
+    // Get summary for a specific week
+    get: protectedProcedure
+      .input(z.object({ weekId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        return getWeeklySummary(ctx.user.id, input.weekId);
+      }),
+
+    // Update or create summary for a week
+    upsert: protectedProcedure
+      .input(z.object({
+        weekId: z.string(),
+        keyword: z.string().nullable().optional(),
+        dailyEntries: z.string().nullable().optional(),
+        reflection: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { weekId, ...data } = input;
+        return upsertWeeklySummary(ctx.user.id, weekId, data);
       }),
   }),
 

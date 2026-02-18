@@ -22,7 +22,8 @@ import { usePlannerStore } from '../hooks/usePlannerStore';
 import { DroppableTimeBlock } from './DroppableTimeBlock';
 import { YearWeekPicker } from './YearWeekPicker';
 import { CustomContentArea } from './CustomContentArea';
-import { ChevronLeft, ChevronRight, Loader2, Image as ImageIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Image as ImageIcon, BookOpen, CalendarDays } from 'lucide-react';
+import { WeeklySummaryView } from './WeeklySummaryView';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
@@ -46,6 +47,7 @@ export function WeeklyView() {
   const [resizingColumn, setResizingColumn] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
+  const [viewMode, setViewMode] = useState<'planner' | 'summary'>('planner');
   const plannerRef = useRef<HTMLDivElement>(null);
   const exportContainerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -349,8 +351,23 @@ export function WeeklyView() {
         )}
         
         <div className="flex items-center gap-1 md:gap-2 mr-12" data-export-hide>
-          {/* Desktop: Export button */}
+          {/* Desktop: View toggle button */}
           {!isMobile && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewMode(prev => prev === 'planner' ? 'summary' : 'planner')}
+              className="gap-2"
+            >
+              {viewMode === 'planner' ? (
+                <><BookOpen className="h-4 w-4" />周总结</>
+              ) : (
+                <><CalendarDays className="h-4 w-4" />周计划</>
+              )}
+            </Button>
+          )}
+          {/* Desktop: Export button - only show in planner mode */}
+          {!isMobile && viewMode === 'planner' && (
             <Button 
               variant="outline" 
               size="sm" 
@@ -378,7 +395,10 @@ export function WeeklyView() {
         </div>
       </header>
 
-      {/* Main Grid */}
+      {/* Main Content - conditionally render planner or summary */}
+      {viewMode === 'summary' ? (
+        <WeeklySummaryView currentDate={currentDate} />
+      ) : (
       <div ref={scrollContainerRef} className="flex-1 overflow-auto">
         <div 
           ref={plannerRef} 
@@ -584,6 +604,7 @@ export function WeeklyView() {
           </DndContext>
         </div>
       </div>
+      )}
     </div>
       
       {/* Year Week Picker Modal */}

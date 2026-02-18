@@ -54,6 +54,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "docx": "^9.5.3",
     "dotenv": "^16.3.1",
     "drizzle-orm": "^0.44.5",
     "embla-carousel-react": "^8.6.0",
