@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
 import { useSummaryStore } from '../hooks/useSummaryStore';
 import { getWeekDays, formatWeekDisplay, getDayLabel, getDateLabel } from '../lib/date-utils';
 import { cn } from '../lib/utils';
@@ -12,6 +12,41 @@ interface WeeklySummaryViewProps {
 }
 
 const DAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+// Two full-width spaces for Chinese paragraph indentation
+const INDENT = '\u3000\u3000';
+
+/**
+ * Handle Tab key in textarea: insert two full-width spaces (Chinese paragraph indent)
+ */
+function handleTabKey(e: KeyboardEvent<HTMLTextAreaElement>) {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const target = e.target as HTMLTextAreaElement;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const value = target.value;
+
+    // Insert indent at cursor position
+    const newValue = value.substring(0, start) + INDENT + value.substring(end);
+    
+    // We need to trigger the change through a native input event
+    // so React's controlled component picks it up
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype, 'value'
+    )?.set;
+    nativeInputValueSetter?.call(target, newValue);
+    
+    // Fire input event so React onChange fires
+    const inputEvent = new Event('input', { bubbles: true });
+    target.dispatchEvent(inputEvent);
+    
+    // Restore cursor position after indent
+    requestAnimationFrame(() => {
+      target.selectionStart = target.selectionEnd = start + INDENT.length;
+    });
+  }
+}
 
 export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
@@ -201,17 +236,13 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
   return (
     <div className="flex-1 overflow-auto">
       <div className="max-w-4xl mx-auto p-6 space-y-6">
-        {/* Title with keyword */}
+        {/* Title: only keyword input + export button */}
         <div className="flex items-center gap-3">
-          <div className="text-lg font-semibold text-foreground shrink-0">
-            {format(weekDays[0], 'yyyy.M.d')}-{format(weekDays[6], 'yyyy.M.d')} {formatWeekDisplay(currentDate).replace(/^\d+年\s*/, '')}
-          </div>
-          <span className="text-muted-foreground shrink-0">_</span>
           <input
             type="text"
             value={localKeyword}
             onChange={(e) => handleKeywordChange(e.target.value)}
-            placeholder="本周关键词（如：大爷去世）"
+            placeholder="本周关键词"
             className="flex-1 text-lg font-semibold bg-transparent border-b border-dashed border-border focus:border-primary outline-none px-1 py-0.5 text-foreground placeholder:text-muted-foreground/40"
           />
           <Button
@@ -249,6 +280,7 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
                     <textarea
                       value={content}
                       onChange={(e) => handleDailyEntryChange(index, e.target.value)}
+                      onKeyDown={handleTabKey}
                       placeholder={`${dayLabel}的记录...`}
                       className={cn(
                         "w-full bg-transparent resize-none outline-none text-sm leading-relaxed",
@@ -288,6 +320,7 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
           <textarea
             value={localReflection}
             onChange={(e) => handleReflectionChange(e.target.value)}
+            onKeyDown={handleTabKey}
             placeholder="写下本周的总结和感悟..."
             className={cn(
               "w-full bg-transparent resize-none outline-none text-sm leading-relaxed",
