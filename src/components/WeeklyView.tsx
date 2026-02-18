@@ -264,7 +264,10 @@ export function WeeklyView() {
       buttonsToHide.forEach(el => (el as HTMLElement).style.visibility = 'visible');
       
       const link = document.createElement('a');
-      link.download = `周计划_${format(weekDays[0], 'yyyy-MM-dd')}.png`;
+      const weekTitle = formatWeekDisplay(currentDate);
+      const startDate = `${weekDays[0].getMonth() + 1}.${weekDays[0].getDate()}`;
+      const endDate = `${weekDays[6].getMonth() + 1}.${weekDays[6].getDate()}`;
+      link.download = `${weekTitle}${startDate}-${endDate}.png`;
       link.href = dataUrl;
       link.click();
       
@@ -550,7 +553,7 @@ export function WeeklyView() {
               {/* Right: Notes - desktop only */}
               {!isMobile && (
                 <div 
-                  className="bg-secondary/5 shrink-0 cursor-text"
+                  className="bg-secondary/5 shrink-0 cursor-text flex flex-col h-full"
                   style={{ width: NOTES_WIDTH }}
                   onClick={(e) => {
                     // Click anywhere in the notes area to focus the textarea
@@ -565,7 +568,7 @@ export function WeeklyView() {
                     onChange={(e) => setNoteContent(e.target.value)}
                     onBlur={handleNoteBlur}
                     placeholder="本周备注..."
-                    className="w-full h-full p-4 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground/50 block"
+                    className="w-full flex-1 p-4 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground/50 block min-h-0"
                   />
                 </div>
               )}

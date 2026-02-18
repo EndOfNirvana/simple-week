@@ -45,7 +45,8 @@ export function TaskItem({ task, onToggle, onDelete, onUpdate }: TaskItemProps) 
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && e.ctrlKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
+      // Shift+Enter: insert newline
       e.preventDefault();
       const target = e.target as HTMLTextAreaElement;
       const start = target.selectionStart;
@@ -59,7 +60,8 @@ export function TaskItem({ task, onToggle, onDelete, onUpdate }: TaskItemProps) 
           autoResize(textareaRef.current);
         }
       }, 0);
-    } else if (e.key === 'Enter' && !e.ctrlKey) {
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      // Enter alone: save
       e.preventDefault();
       handleSave();
     } else if (e.key === 'Escape') {
@@ -68,20 +70,11 @@ export function TaskItem({ task, onToggle, onDelete, onUpdate }: TaskItemProps) 
     }
   };
 
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onToggle(task.id);
-  };
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsEditing(true);
-  };
+  const isCompleted = task.completed;
 
   if (isEditing) {
     return (
-      <div className="flex items-start gap-2 p-1 -ml-1">
+      <div className="flex items-start gap-1.5 p-1 -ml-1">
         <textarea
           ref={textareaRef}
           value={editValue}
@@ -98,15 +91,34 @@ export function TaskItem({ task, onToggle, onDelete, onUpdate }: TaskItemProps) 
     );
   }
 
-  const isCompleted = task.completed;
-
   return (
-    <div className="group flex items-start gap-2 py-1 text-sm animate-in fade-in duration-200">
-      <span 
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+    <div className="group flex items-start gap-1.5 py-1 text-sm animate-in fade-in duration-200">
+      {/* Dot indicator: click to toggle completion */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle(task.id);
+        }}
         className={cn(
-          "flex-1 cursor-text break-all whitespace-pre-wrap leading-tight transition-opacity min-w-0 select-none",
+          "mt-1 flex h-3 w-3 shrink-0 items-center justify-center rounded-full border transition-all",
+          isCompleted
+            ? "bg-primary border-primary"
+            : "border-muted-foreground/40 hover:border-primary bg-transparent"
+        )}
+        title={isCompleted ? "点击取消完成" : "点击标记完成"}
+      >
+        {isCompleted && (
+          <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+        )}
+      </button>
+
+      <span 
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsEditing(true);
+        }}
+        className={cn(
+          "flex-1 cursor-text break-all whitespace-pre-wrap leading-tight transition-opacity min-w-0",
           isCompleted && "line-through text-muted-foreground opacity-60"
         )}
       >

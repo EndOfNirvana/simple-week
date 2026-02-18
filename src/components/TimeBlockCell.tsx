@@ -53,7 +53,8 @@ export function TimeBlockCell({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && e.ctrlKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
+      // Shift+Enter: insert newline
       e.preventDefault();
       const target = e.target as HTMLTextAreaElement;
       const start = target.selectionStart;
@@ -67,7 +68,8 @@ export function TimeBlockCell({
           autoResize(textareaRef.current);
         }
       }, 0);
-    } else if (e.key === 'Enter' && !e.ctrlKey) {
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      // Enter alone: add task
       e.preventDefault();
       handleAdd();
     } else if (e.key === 'Escape') {
@@ -76,7 +78,6 @@ export function TimeBlockCell({
     }
   };
 
-  // Filter tasks for this specific block
   const blockTasks = tasks.filter(t => t.timeBlock === timeBlock);
 
   return (
@@ -84,7 +85,6 @@ export function TimeBlockCell({
       ref={containerRef}
       className="h-full min-h-[120px] p-2 hover:bg-accent/20 transition-colors relative group flex flex-col overflow-hidden"
       onClick={(e) => {
-        // Only trigger add if clicking empty space
         if (e.target === containerRef.current) {
           setIsAdding(true);
         }
@@ -112,7 +112,7 @@ export function TimeBlockCell({
               }}
               onBlur={handleAdd}
               onKeyDown={handleKeyDown}
-              placeholder="输入任务... (Ctrl+Enter换行)"
+              placeholder="输入任务... (Shift+Enter换行)"
               rows={1}
               className="flex-1 bg-transparent border-b border-primary outline-none text-sm resize-none overflow-hidden leading-tight"
             />

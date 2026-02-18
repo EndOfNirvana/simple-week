@@ -48,7 +48,6 @@ export function DroppableTimeBlock({
     if (newValue.trim()) {
       onAddTask(newValue.trim(), date, timeBlock);
       setNewValue('');
-      // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -59,8 +58,8 @@ export function DroppableTimeBlock({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && e.ctrlKey) {
-      // Ctrl+Enter: insert newline
+    if (e.key === 'Enter' && e.shiftKey) {
+      // Shift+Enter: insert newline
       e.preventDefault();
       const target = e.target as HTMLTextAreaElement;
       const start = target.selectionStart;
@@ -74,7 +73,7 @@ export function DroppableTimeBlock({
           autoResize(textareaRef.current);
         }
       }, 0);
-    } else if (e.key === 'Enter' && !e.ctrlKey) {
+    } else if (e.key === 'Enter' && !e.shiftKey) {
       // Enter alone: add task
       e.preventDefault();
       handleAdd();
@@ -127,7 +126,7 @@ export function DroppableTimeBlock({
                 }}
                 onBlur={handleAdd}
                 onKeyDown={handleKeyDown}
-                placeholder="输入任务... (Ctrl+Enter换行)"
+                placeholder="输入任务... (Shift+Enter换行)"
                 rows={1}
                 className="flex-1 bg-transparent border-b border-primary outline-none text-sm resize-none overflow-hidden leading-tight"
               />

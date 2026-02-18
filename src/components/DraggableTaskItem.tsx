@@ -21,6 +21,7 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -35,15 +36,12 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
   useEffect(() => {
     if (isEditing && textareaRef.current) {
       textareaRef.current.focus();
-      // Move cursor to end
       const len = textareaRef.current.value.length;
       textareaRef.current.setSelectionRange(len, len);
-      // Auto-resize
       autoResize(textareaRef.current);
     }
   }, [isEditing]);
 
-  // Sync editValue when task.content changes externally
   useEffect(() => {
     if (!isEditing) {
       setEditValue(task.content);
@@ -65,15 +63,14 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && e.ctrlKey) {
-      // Ctrl+Enter: insert newline
+    if (e.key === 'Enter' && e.shiftKey) {
+      // Shift+Enter: insert newline
       e.preventDefault();
       const target = e.target as HTMLTextAreaElement;
       const start = target.selectionStart;
       const end = target.selectionEnd;
       const newValue = editValue.substring(0, start) + '\n' + editValue.substring(end);
       setEditValue(newValue);
-      // Set cursor position after React re-render
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.selectionStart = start + 1;
@@ -81,7 +78,7 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
           autoResize(textareaRef.current);
         }
       }, 0);
-    } else if (e.key === 'Enter' && !e.ctrlKey) {
+    } else if (e.key === 'Enter' && !e.shiftKey) {
       // Enter alone: save
       e.preventDefault();
       handleSave();
@@ -91,20 +88,11 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     }
   };
 
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onToggle(task.id);
-  };
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsEditing(true);
-  };
+  const isCompleted = task.completed;
 
   if (isEditing) {
     return (
-      <div className="flex items-start gap-1 p-1 -ml-1">
+      <div ref={setNodeRef} style={style} className="flex items-start gap-1.5 p-1 -ml-1">
         <textarea
           ref={textareaRef}
           value={editValue}
@@ -121,21 +109,41 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     );
   }
 
-  const isCompleted = task.completed;
-
   return (
     <div 
       ref={setNodeRef} 
       style={style}
-      {...attributes}
-      {...listeners}
-      className="group flex items-start gap-1 py-1 text-sm animate-in fade-in duration-200 cursor-grab active:cursor-grabbing"
+      className="group flex items-start gap-1.5 py-1 text-sm animate-in fade-in duration-200"
     >
-      <span 
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+      {/* Drag handle: the dot indicator area */}
+      <button
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle(task.id);
+        }}
         className={cn(
-          "flex-1 cursor-text break-all whitespace-pre-wrap leading-tight transition-opacity min-w-0 select-none",
+          "mt-1 flex h-3 w-3 shrink-0 items-center justify-center rounded-full border transition-all cursor-grab active:cursor-grabbing",
+          isCompleted
+            ? "bg-primary border-primary"
+            : "border-muted-foreground/40 hover:border-primary bg-transparent"
+        )}
+        title={isCompleted ? "点击取消完成" : "点击标记完成 | 拖动排序"}
+      >
+        {isCompleted && (
+          <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+        )}
+      </button>
+      
+      <span 
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsEditing(true);
+        }}
+        className={cn(
+          "flex-1 cursor-text break-all whitespace-pre-wrap leading-tight transition-opacity min-w-0",
           isCompleted && "line-through text-muted-foreground opacity-60"
         )}
       >
