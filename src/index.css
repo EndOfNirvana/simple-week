@@ -163,6 +163,104 @@
 }
 
 @layer components {
+  .week-workspace, .week-login {
+    --primary: #305b49;
+    --background: #f6f5ef;
+    --foreground: #25382f;
+    --card: #fffefb;
+    --card-foreground: #25382f;
+    --popover: #fffefb;
+    --popover-foreground: #25382f;
+    --secondary: #eeeee6;
+    --secondary-foreground: #25382f;
+    --muted: #eeeee6;
+    --muted-foreground: #627067;
+    --accent: #e8efe6;
+    --accent-foreground: #305b49;
+    --border: #e1e4da;
+    --input: #cbd4c8;
+    --ring: #527b67;
+    --radius: 0.625rem;
+  }
+
+  .week-container {
+    width: min(100%, 1680px);
+    margin-inline: auto;
+    padding-inline: clamp(0.75rem, 2.25vw, 2.25rem);
+  }
+
+  .week-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand views"
+      "period controls";
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding-block: 0.625rem;
+  }
+
+  .week-toolbar:has(.week-custom-content) {
+    grid-template-areas:
+      "brand views"
+      "period controls"
+      "title title";
+  }
+
+  .week-brand {
+    grid-area: brand;
+  }
+
+  .week-period {
+    grid-area: period;
+  }
+
+  .week-custom-content {
+    grid-area: title;
+  }
+
+  .week-controls {
+    grid-area: controls;
+  }
+
+  .week-view-switch {
+    grid-area: views;
+    justify-self: end;
+  }
+
+  .week-board {
+    box-shadow: 0 2px 4px #25382f0a, 0 12px 32px #25382f08;
+    scrollbar-color: var(--input) var(--secondary);
+  }
+
+  @media (max-width: 767px) {
+    .week-time-column {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: var(--secondary);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .week-toolbar, .week-toolbar:has(.week-custom-content) {
+      min-height: 4.25rem;
+      grid-template-columns: auto auto minmax(8rem, 1fr) auto auto;
+      grid-template-areas: "brand period title controls views";
+      column-gap: clamp(0.75rem, 1.3vw, 1.25rem);
+    }
+
+    .week-custom-content {
+      width: min(100%, 22rem);
+      justify-self: center;
+    }
+
+    .week-period {
+      border-inline-start: 1px solid var(--border);
+      padding-inline-start: clamp(0.75rem, 1.3vw, 1.25rem);
+    }
+  }
+
   .container {
     width: 100%;
     margin-left: auto;

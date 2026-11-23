@@ -10,6 +10,7 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "db:week-ids": "tsx scripts/migrate-week-ids.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

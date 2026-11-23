@@ -15,7 +15,7 @@ export interface Task {
 export interface Note {
   id: number;
   userId: number;
-  weekId: string; // Format: YYYY-Www (e.g., 2026-W03)
+  weekId: string; // Monday date, or a legacy week identifier.
   content: string | null;
   createdAt: Date;
   updatedAt: Date;

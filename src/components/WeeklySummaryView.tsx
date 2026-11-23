@@ -1,14 +1,17 @@
-import { useState, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
-import { useSummaryStore } from '../hooks/useSummaryStore';
-import { getWeekDays, formatWeekDisplay, getDayLabel, getDateLabel } from '../lib/date-utils';
+import { useCallback, useMemo, type KeyboardEvent } from 'react';
+import type { useSummaryStore } from '../hooks/useSummaryStore';
+import { getWeekDays, formatWeekDisplay } from '../lib/date-utils';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
-import { Loader2, FileDown } from 'lucide-react';
+import { Loader2, FileDown, NotebookPen, PenLine } from 'lucide-react';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
 
 interface WeeklySummaryViewProps {
   currentDate: Date;
+  title: string;
+  onTitleChange: (title: string) => void;
+  summary: ReturnType<typeof useSummaryStore>;
 }
 
 const DAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -48,52 +51,20 @@ function handleTabKey(e: KeyboardEvent<HTMLTextAreaElement>) {
   }
 }
 
-export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
+export function WeeklySummaryView({ currentDate, title, onTitleChange, summary }: WeeklySummaryViewProps) {
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
   
   const {
-    keyword,
     dailyEntries,
     reflection,
     isLoading,
-    updateKeyword,
+    loadFailed,
+    retryLoad,
+    saveStatus,
+    retrySave,
     updateDailyEntry,
     updateReflection,
-  } = useSummaryStore(currentDate);
-
-  // Local state for controlled inputs
-  const [localKeyword, setLocalKeyword] = useState(keyword);
-  const [localDailyEntries, setLocalDailyEntries] = useState<Record<string, string>>({});
-  const [localReflection, setLocalReflection] = useState(reflection);
-
-  // Sync from server data
-  useEffect(() => {
-    setLocalKeyword(keyword);
-  }, [keyword]);
-
-  useEffect(() => {
-    setLocalDailyEntries(dailyEntries);
-  }, [dailyEntries]);
-
-  useEffect(() => {
-    setLocalReflection(reflection);
-  }, [reflection]);
-
-  // Handlers with auto-save on change
-  const handleKeywordChange = useCallback((value: string) => {
-    setLocalKeyword(value);
-    updateKeyword(value || null);
-  }, [updateKeyword]);
-
-  const handleDailyEntryChange = useCallback((dayIndex: number, value: string) => {
-    setLocalDailyEntries(prev => ({ ...prev, [dayIndex.toString()]: value }));
-    updateDailyEntry(dayIndex, value);
-  }, [updateDailyEntry]);
-
-  const handleReflectionChange = useCallback((value: string) => {
-    setLocalReflection(value);
-    updateReflection(value || null);
-  }, [updateReflection]);
+  } = summary;
 
   // Build title string: "2026.2.9-2026.2.15 第七周_关键词"
   const weekTitle = useMemo(() => {
@@ -102,9 +73,9 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
     const weekDisplay = formatWeekDisplay(currentDate);
     // Extract week number from "2026年 第7周" -> "第7周"
     const weekNum = weekDisplay.replace(/^\d+年\s*/, '');
-    const kw = localKeyword ? `_${localKeyword}` : '';
+    const kw = title ? `_${title}` : '';
     return `${startStr}-${endStr}${weekNum}${kw}`;
-  }, [weekDays, currentDate, localKeyword]);
+  }, [weekDays, currentDate, title]);
 
   // Export to Word
   const handleExportWord = useCallback(async () => {
@@ -135,7 +106,7 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
         const day = weekDays[i];
         const dateStr = `${day.getMonth() + 1}.${day.getDate()}`;
         const dayLabel = DAY_LABELS[i];
-        const content = localDailyEntries[i.toString()] || '';
+        const content = dailyEntries[i.toString()] || '';
         
         // Day header + content in one paragraph
         const dayHeaderText = `${dateStr} ${dayLabel}`;
@@ -175,7 +146,7 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
       }
 
       // Reflection section
-      if (localReflection) {
+      if (reflection) {
         children.push(
           new Paragraph({
             children: [
@@ -187,7 +158,7 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
           })
         );
 
-        const reflectionLines = localReflection.split('\n');
+        const reflectionLines = reflection.split('\n');
         for (const line of reflectionLines) {
           children.push(
             new Paragraph({
@@ -223,7 +194,7 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
       console.error('Export Word failed:', error);
       toast.error('导出失败，请重试');
     }
-  }, [weekTitle, weekDays, localDailyEntries, localReflection]);
+  }, [weekTitle, weekDays, dailyEntries, reflection]);
 
   if (isLoading) {
     return (
@@ -233,61 +204,77 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
     );
   }
 
+  if (loadFailed) {
+    return (
+      <main className="grid flex-1 place-content-center gap-3 text-center text-sm text-muted-foreground">
+        <p role="alert">周总结加载失败</p>
+        <Button variant="outline" onClick={retryLoad}>重新加载</Button>
+      </main>
+    );
+  }
+
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
-        {/* Title: only keyword input + export button */}
-        <div className="flex items-center gap-3">
-          <input
-            type="text"
-            value={localKeyword}
-            onChange={(e) => handleKeywordChange(e.target.value)}
-            placeholder="本周关键词"
-            className="flex-1 text-lg font-semibold bg-transparent border-b border-dashed border-border focus:border-primary outline-none px-1 py-0.5 text-foreground placeholder:text-muted-foreground/40"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportWord}
-            className="gap-2 shrink-0"
-          >
-            <FileDown className="h-4 w-4" />
-            导出Word
+    <main className="min-h-0 flex-1 overflow-auto">
+      <div className="mx-auto w-full max-w-4xl space-y-4 px-3 pt-3 pb-6 sm:px-6 md:space-y-5 md:pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3 shadow-xs sm:flex-nowrap sm:p-4">
+          <label className="flex min-w-0 flex-1 items-center rounded-lg border bg-secondary/35 px-3 focus-within:border-primary/50 focus-within:bg-card">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => onTitleChange(e.target.value)}
+              placeholder="本周标题"
+              aria-label="本周标题"
+              className="min-w-0 flex-1 bg-transparent py-2.5 text-sm font-medium outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+          {saveStatus !== 'idle' && (
+            <div role="status" className={cn(
+              'flex shrink-0 items-center gap-2 text-xs',
+              saveStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'
+            )}>
+              {saveStatus === 'error' ? (
+                <>保存失败 <Button variant="outline" size="sm" onClick={retrySave}>重试</Button></>
+              ) : (
+                <><Loader2 aria-hidden="true" className="size-3.5 animate-spin" />正在保存</>
+              )}
+            </div>
+          )}
+          <Button onClick={handleExportWord} className="h-10 rounded-lg">
+            <FileDown aria-hidden="true" className="size-4" />导出 Word
           </Button>
         </div>
 
         {/* Daily entries */}
-        <div className="space-y-4">
+        <section className="overflow-hidden rounded-xl border bg-card shadow-xs" aria-labelledby="daily-entries-title">
+          <h2 id="daily-entries-title" className="flex items-center gap-2 border-b px-4 py-3.5 text-sm font-semibold sm:px-5">
+            <NotebookPen aria-hidden="true" className="size-4 text-primary" />每日记录
+          </h2>
+          <div className="divide-y">
           {weekDays.map((day, index) => {
             const dateStr = `${day.getMonth() + 1}.${day.getDate()}`;
             const dayLabel = DAY_LABELS[index];
-            const content = localDailyEntries[index.toString()] || '';
+            const content = dailyEntries[index.toString()] || '';
 
             return (
-              <div key={index} className="group">
-                <div className="flex items-start gap-3">
-                  {/* Day label */}
-                  <div className="shrink-0 w-24 pt-2">
-                    <span className="text-sm font-bold text-primary">
+              <div key={index} className="flex items-start gap-2 px-2 py-2.5 focus-within:bg-accent/35 sm:gap-3 sm:px-5">
+                  <label htmlFor={`daily-entry-${index}`} className="flex w-[4.25rem] shrink-0 flex-col gap-0.5 py-1.5 pl-2 sm:w-24 sm:pl-0">
+                    <span className="text-sm font-semibold tabular-nums text-primary">
                       {dateStr}
                     </span>
-                    <span className="text-sm font-medium text-muted-foreground ml-1">
+                    <span className="text-xs font-medium text-muted-foreground">
                       {dayLabel}
                     </span>
-                  </div>
-                  {/* Content textarea */}
+                  </label>
                   <div className="flex-1 min-w-0">
                     <textarea
+                      id={`daily-entry-${index}`}
                       value={content}
-                      onChange={(e) => handleDailyEntryChange(index, e.target.value)}
+                      onChange={(e) => updateDailyEntry(index, e.target.value)}
                       onKeyDown={handleTabKey}
                       placeholder={`${dayLabel}的记录...`}
                       className={cn(
-                        "w-full bg-transparent resize-none outline-none text-sm leading-relaxed",
-                        "border border-transparent rounded-md p-2",
-                        "hover:border-border focus:border-primary/50 transition-colors",
-                        "placeholder:text-muted-foreground/30",
-                        "min-h-[40px] break-words whitespace-pre-wrap"
+                        "block min-h-11 w-full resize-none whitespace-pre-wrap rounded-lg border border-transparent bg-transparent px-2.5 py-2 text-sm leading-7 outline-none [overflow-wrap:anywhere]",
+                        "transition-colors placeholder:text-muted-foreground/80 hover:border-border focus:border-primary/35 focus:bg-card"
                       )}
                       rows={1}
                       onInput={(e) => {
@@ -305,29 +292,26 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
                       }}
                     />
                   </div>
-                </div>
               </div>
             );
           })}
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-border" />
+          </div>
+        </section>
 
         {/* Weekly reflection */}
-        <div>
-          <div className="text-sm font-bold text-primary mb-2">周总结</div>
+        <section className="rounded-xl border bg-card p-4 shadow-xs sm:p-5">
+          <label htmlFor="weekly-reflection" className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            <PenLine aria-hidden="true" className="size-4 text-primary" />周总结
+          </label>
           <textarea
-            value={localReflection}
-            onChange={(e) => handleReflectionChange(e.target.value)}
+            id="weekly-reflection"
+            value={reflection}
+            onChange={(e) => updateReflection(e.target.value || null)}
             onKeyDown={handleTabKey}
             placeholder="写下本周的总结和感悟..."
             className={cn(
-              "w-full bg-transparent resize-none outline-none text-sm leading-relaxed",
-              "border border-dashed border-border rounded-md p-3",
-              "hover:border-primary/30 focus:border-primary/50 transition-colors",
-              "placeholder:text-muted-foreground/30",
-              "min-h-[120px]"
+              "block min-h-[120px] w-full resize-none rounded-lg border bg-secondary/30 p-3 text-sm leading-7 outline-none",
+              "transition-colors placeholder:text-muted-foreground hover:border-primary/30 focus:border-primary/50 focus:bg-card"
             )}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
@@ -335,14 +319,14 @@ export function WeeklySummaryView({ currentDate }: WeeklySummaryViewProps) {
               target.style.height = Math.max(120, target.scrollHeight) + 'px';
             }}
             ref={(el) => {
-              if (el && localReflection) {
+              if (el && reflection) {
                 el.style.height = 'auto';
                 el.style.height = Math.max(120, el.scrollHeight) + 'px';
               }
             }}
           />
-        </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

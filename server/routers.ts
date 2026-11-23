@@ -1,10 +1,15 @@
 import { publicProcedure, protectedProcedure, router } from "./trpc";
 import { z } from "zod";
-import { getTasksForWeek, createTask, updateTask, deleteTask, getNoteForWeek, upsertNote, getWeekSettings, upsertWeekSettings, updateCustomContent, getWeeklySummary, upsertWeeklySummary } from "./db";
+import { getTasksForWeek, createTask, moveTask, updateTask, deleteTask, getNoteForWeek, upsertNote, getWeekSettings, upsertWeekSettings, updateCustomContent, getWeeklySummary, upsertWeeklySummary } from "./db";
 import { uploadToR2 } from "./storage";
 import { nanoid } from "nanoid";
+import { getLegacyWeekStarts, isWeekStartId } from "../shared/week-id";
 
 const timeBlockSchema = z.enum(["morning", "afternoon", "evening"]);
+const writableWeekId = z.string().refine(
+  weekId => isWeekStartId(weekId) || getLegacyWeekStarts(weekId).length === 1,
+  "无法确定该周的日期，请刷新后重试"
+);
 
 export const appRouter = router({
   authentication: router({
@@ -37,7 +42,7 @@ export const appRouter = router({
           content: input.content,
           date: input.date,
           timeBlock: input.timeBlock,
-          sortOrder: input.sortOrder ?? 0,
+          sortOrder: input.sortOrder,
         });
       }),
 
@@ -55,6 +60,15 @@ export const appRouter = router({
         const { id, ...updates } = input;
         return updateTask(id, ctx.user.id, updates);
       }),
+
+    move: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        date: z.string(),
+        timeBlock: timeBlockSchema,
+        targetTaskId: z.number().int().positive().optional(),
+      }))
+      .mutation(({ ctx, input }) => moveTask(ctx.user.id, input)),
 
     // Delete a task
     delete: protectedProcedure
@@ -76,7 +90,7 @@ export const appRouter = router({
     // Update or create note for a week
     upsert: protectedProcedure
       .input(z.object({
-        weekId: z.string(),
+        weekId: writableWeekId,
         content: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -96,9 +110,10 @@ export const appRouter = router({
     // Update or create summary for a week
     upsert: protectedProcedure
       .input(z.object({
-        weekId: z.string(),
+        weekId: writableWeekId,
         keyword: z.string().nullable().optional(),
         dailyEntries: z.string().nullable().optional(),
+        dailyEntryChanges: z.record(z.enum(['0', '1', '2', '3', '4', '5', '6']), z.string()).optional(),
         reflection: z.string().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -119,7 +134,7 @@ export const appRouter = router({
     // Update column widths for a week
     updateColumnWidths: protectedProcedure
       .input(z.object({
-        weekId: z.string(),
+        weekId: writableWeekId,
         columnWidths: z.record(z.string(), z.number()),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -133,7 +148,7 @@ export const appRouter = router({
     // Update custom content (text and/or image)
     updateCustomContent: protectedProcedure
       .input(z.object({
-        weekId: z.string(),
+        weekId: writableWeekId,
         customText: z.string().nullable().optional(),
         customImageUrl: z.string().nullable().optional(),
       }))
@@ -149,7 +164,7 @@ export const appRouter = router({
     // Upload custom image
     uploadCustomImage: protectedProcedure
       .input(z.object({
-        weekId: z.string(),
+        weekId: writableWeekId,
         imageBase64: z.string(),
         mimeType: z.string(),
       }))

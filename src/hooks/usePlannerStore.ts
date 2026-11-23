@@ -1,7 +1,10 @@
 import { trpc } from '../lib/trpc';
 import { TimeBlock, Task } from '../lib/types';
-import { format, startOfWeek, endOfWeek, getISOWeek, getYear } from 'date-fns';
-import { useMemo, useCallback, useRef } from 'react';
+import { format, startOfWeek, endOfWeek } from 'date-fns';
+import { useMemo, useCallback, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { moveTaskWithinWeek } from '../../shared/week-data';
+import { getWeekId } from '../../shared/week-id';
 
 // Default column width
 const DEFAULT_COLUMN_WIDTH = 130;
@@ -22,10 +25,7 @@ export function usePlannerStore(currentDate: Date) {
   const startDate = format(weekStart, 'yyyy-MM-dd');
   const endDate = format(weekEnd, 'yyyy-MM-dd');
   
-  // Get week ID using ISO week number for consistency
-  const year = getYear(weekStart);
-  const weekNumber = getISOWeek(weekStart);
-  const weekId = `${year}-W${weekNumber.toString().padStart(2, '0')}`;
+  const weekId = getWeekId(weekStart);
 
   // Queries with staleTime to reduce refetches
   const tasksQuery = trpc.tasks.getForWeek.useQuery(
@@ -40,6 +40,15 @@ export function usePlannerStore(currentDate: Date) {
     { weekId },
     { staleTime: 60000 } // 1 minute
   );
+  const legacySummaryQuery = trpc.weeklySummary.get.useQuery(
+    { weekId },
+    {
+      enabled: weekSettingsQuery.isSuccess && weekSettingsQuery.data?.customText == null,
+      staleTime: 30000,
+    }
+  );
+  const [titleDrafts, setTitleDrafts] = useState<Record<string, { text: string }>>({});
+  const titleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   // Mutations with optimistic updates
   const utils = trpc.useUtils();
@@ -55,14 +64,18 @@ export function usePlannerStore(currentDate: Date) {
       // Optimistically update
       utils.tasks.getForWeek.setData({ startDate, endDate }, (old) => {
         if (!old) return old;
+        const now = new Date();
         const tempTask: Task = {
-          id: Date.now(), // Temporary ID
+          id: -now.getTime(),
+          userId: old[0]?.userId ?? 0,
           content: newTask.content,
           date: newTask.date,
           timeBlock: newTask.timeBlock,
           completed: false,
-          sortOrder: old.length,
-          createdAt: new Date(),
+          sortOrder: old.filter(task => task.date === newTask.date && task.timeBlock === newTask.timeBlock)
+            .reduce((next, task) => Math.max(next, task.sortOrder + 1), 0),
+          createdAt: now,
+          updatedAt: now,
         };
         return [...old, tempTask];
       });
@@ -128,7 +141,33 @@ export function usePlannerStore(currentDate: Date) {
     },
   });
 
+  const moveTaskMutation = trpc.tasks.move.useMutation({
+    scope: { id: 'task-placement' },
+    onMutate: async (input) => {
+      const week = { startDate, endDate };
+      await utils.tasks.getForWeek.cancel(week);
+      const previous = utils.tasks.getForWeek.getData(week);
+      const task = previous?.find(task => task.id === input.id);
+      if (previous && task) {
+        const changes = moveTaskWithinWeek(previous, task, input, input.targetTaskId);
+        const positions = new Map(changes.map(task => [task.id, task]));
+        utils.tasks.getForWeek.setData(week, previous
+          .map(task => positions.get(task.id) ?? task)
+          .sort((a, b) => a.sortOrder - b.sortOrder));
+      }
+      return { week, previous };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) utils.tasks.getForWeek.setData(context.week, context.previous);
+      toast.error('任务移动失败，请重试');
+    },
+    onSettled: (_tasks, _error, _input, context) => {
+      if (context) utils.tasks.getForWeek.invalidate(context.week);
+    },
+  });
+
   const upsertNoteMutation = trpc.notes.upsert.useMutation({
+    scope: { id: 'week-note' },
     onMutate: async ({ weekId, content }) => {
       await utils.notes.getForWeek.cancel({ weekId });
       const previousNote = utils.notes.getForWeek.getData({ weekId });
@@ -144,8 +183,9 @@ export function usePlannerStore(currentDate: Date) {
       if (context?.previousNote !== undefined) {
         utils.notes.getForWeek.setData({ weekId: variables.weekId }, context.previousNote);
       }
+      toast.error('备注保存失败，请重试');
     },
-    onSettled: () => {
+    onSettled: (_note, _error, { weekId }) => {
       utils.notes.getForWeek.invalidate({ weekId });
     },
   });
@@ -157,6 +197,7 @@ export function usePlannerStore(currentDate: Date) {
   });
 
   const updateCustomContentMutation = trpc.weekSettings.updateCustomContent.useMutation({
+    scope: { id: 'week-custom-content' },
     onMutate: async ({ weekId, customText, customImageUrl }) => {
       await utils.weekSettings.get.cancel({ weekId });
       const previousSettings = utils.weekSettings.get.getData({ weekId });
@@ -177,13 +218,14 @@ export function usePlannerStore(currentDate: Date) {
         utils.weekSettings.get.setData({ weekId: variables.weekId }, context.previousSettings);
       }
     },
-    onSettled: () => {
-      utils.weekSettings.get.invalidate({ weekId });
+    onSuccess: (settings, { weekId, customText, customImageUrl }) => {
+      utils.weekSettings.get.setData({ weekId }, (old) => old ? {
+        ...old,
+        customText: customText !== undefined ? settings.customText : old.customText,
+        customImageUrl: customImageUrl !== undefined ? settings.customImageUrl : old.customImageUrl,
+      } : settings);
     },
-  });
-
-  const uploadCustomImageMutation = trpc.weekSettings.uploadCustomImage.useMutation({
-    onSettled: () => {
+    onSettled: (_settings, _error, { weekId }) => {
       utils.weekSettings.get.invalidate({ weekId });
     },
   });
@@ -207,7 +249,8 @@ export function usePlannerStore(currentDate: Date) {
   }, [weekSettingsQuery.data?.columnWidths]);
 
   // Custom content from settings
-  const customText = weekSettingsQuery.data?.customText ?? null;
+  // An empty saved title is an explicit clear. Only missing titles fall back to legacy keywords.
+  const customText = titleDrafts[weekId]?.text ?? weekSettingsQuery.data?.customText ?? legacySummaryQuery.data?.keyword ?? '';
   const customImageUrl = weekSettingsQuery.data?.customImageUrl ?? null;
 
   // Actions
@@ -230,25 +273,13 @@ export function usePlannerStore(currentDate: Date) {
     deleteTaskMutation.mutate({ id });
   }, [deleteTaskMutation]);
 
-  const moveTask = useCallback((id: number, newDate: string, newTimeBlock: TimeBlock, newSortOrder?: number) => {
-    updateTaskMutation.mutate({ 
-      id, 
-      date: newDate, 
-      timeBlock: newTimeBlock,
-      sortOrder: newSortOrder 
-    });
-  }, [updateTaskMutation]);
-
-  // Debounced note update
-  const debouncedNoteUpdate = useRef(
-    debounce((wId: string, content: string) => {
-      upsertNoteMutation.mutate({ weekId: wId, content });
-    }, 500)
-  ).current;
+  const moveTask = useCallback((id: number, date: string, timeBlock: TimeBlock, targetTaskId?: number) => {
+    moveTaskMutation.mutate({ id, date, timeBlock, targetTaskId });
+  }, [moveTaskMutation]);
 
   const updateNote = useCallback((content: string) => {
-    debouncedNoteUpdate(weekId, content);
-  }, [weekId, debouncedNoteUpdate]);
+    upsertNoteMutation.mutate({ weekId, content });
+  }, [weekId, upsertNoteMutation]);
 
   // Debounced column width update
   const debouncedColumnWidthUpdate = useRef(
@@ -266,34 +297,28 @@ export function usePlannerStore(currentDate: Date) {
     debouncedColumnWidthUpdate(weekId, widthsForApi);
   }, [columnWidths, weekId, debouncedColumnWidthUpdate]);
 
-  // Debounced custom text update
-  const debouncedCustomTextUpdate = useRef(
-    debounce((wId: string, text: string | null) => {
-      updateCustomContentMutation.mutate({ weekId: wId, customText: text });
-    }, 500)
-  ).current;
-
+  const { mutateAsync: saveCustomContent } = updateCustomContentMutation;
   const updateCustomText = useCallback((text: string | null) => {
-    debouncedCustomTextUpdate(weekId, text);
-  }, [weekId, debouncedCustomTextUpdate]);
+    const draft = { text: text ?? '' };
+    setTitleDrafts(current => ({ ...current, [weekId]: draft }));
+    clearTimeout(titleTimers.current.get(weekId));
 
-  const uploadCustomImage = useCallback(async (file: File) => {
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        uploadCustomImageMutation.mutate(
-          { weekId, imageBase64: base64, mimeType: file.type },
-          {
-            onSuccess: (data) => resolve(data.url),
-            onError: (error) => reject(error),
-          }
-        );
-      };
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-  }, [weekId, uploadCustomImageMutation]);
+    const timer = setTimeout(async () => {
+      titleTimers.current.delete(weekId);
+      try {
+        await saveCustomContent({ weekId, customText: draft.text });
+        setTitleDrafts(current => {
+          if (current[weekId] !== draft) return current;
+          const next = { ...current };
+          delete next[weekId];
+          return next;
+        });
+      } catch {
+        toast.error('本周标题保存失败，请重试');
+      }
+    }, 500);
+    titleTimers.current.set(weekId, timer);
+  }, [weekId, saveCustomContent]);
 
   const clearCustomImage = useCallback(() => {
     updateCustomContentMutation.mutate({ weekId, customImageUrl: null });
@@ -315,8 +340,6 @@ export function usePlannerStore(currentDate: Date) {
     customText,
     customImageUrl,
     updateCustomText,
-    uploadCustomImage,
     clearCustomImage,
-    isUploadingImage: uploadCustomImageMutation.isPending,
   };
 }

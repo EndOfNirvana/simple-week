@@ -1,7 +1,9 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, between, inArray, max, sql } from "drizzle-orm";
 import pg from "pg";
 import { users, tasks, notes, weekSettings, weeklySummaries, Task, Note, WeekSettings, WeeklySummary } from "../drizzle/schema";
+import { moveTaskWithinWeek, parseDailyEntries, type DailyEntries } from "../shared/week-data";
+import { getWeekStorageKeys, selectWeekRecord } from "../shared/week-id";
 
 const { Pool } = pg;
 
@@ -12,6 +14,11 @@ const pool = new Pool({
 });
 
 export const db = drizzle(pool);
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export async function lockWeekRecords(tx: Transaction, userId: number, weekId: string) {
+  await tx.execute(sql`select pg_advisory_xact_lock(2, hashtext(${String(userId) + ':' + weekId}))`);
+}
 
 // ============ User Operations ============
 
@@ -60,12 +67,10 @@ export async function getUserByClerkId(clerkId: string) {
 // ============ Task Operations ============
 
 export async function getTasksForWeek(userId: number, startDate: string, endDate: string): Promise<Task[]> {
-  const result = await db.select()
+  return db.select()
     .from(tasks)
-    .where(eq(tasks.userId, userId))
-    .orderBy(asc(tasks.sortOrder), asc(tasks.createdAt));
-  
-  return result.filter(t => t.date >= startDate && t.date <= endDate);
+    .where(and(eq(tasks.userId, userId), between(tasks.date, startDate, endDate)))
+    .orderBy(asc(tasks.sortOrder), asc(tasks.createdAt), asc(tasks.id));
 }
 
 export async function createTask(taskData: {
@@ -75,18 +80,47 @@ export async function createTask(taskData: {
   timeBlock: "morning" | "afternoon" | "evening";
   sortOrder?: number;
 }): Promise<Task> {
-  const result = await db
-    .insert(tasks)
-    .values({
-      userId: taskData.userId,
-      content: taskData.content,
-      date: taskData.date,
-      timeBlock: taskData.timeBlock,
-      sortOrder: taskData.sortOrder || 0,
+  return db.transaction(async tx => {
+    const { userId, date, timeBlock } = taskData;
+    // Appends and reorders for the same user must agree about the current order.
+    await tx.execute(sql`select pg_advisory_xact_lock(1, ${userId})`);
+    const [order] = await tx.select({ last: max(tasks.sortOrder) }).from(tasks)
+      .where(and(eq(tasks.userId, userId), eq(tasks.date, date), eq(tasks.timeBlock, timeBlock)));
+    const [task] = await tx.insert(tasks).values({
+      ...taskData,
+      sortOrder: taskData.sortOrder ?? (order.last ?? -1) + 1,
       completed: false,
-    })
-    .returning();
-  return result[0];
+    }).returning();
+    return task;
+  });
+}
+
+export async function moveTask(userId: number, input: {
+  id: number;
+  date: string;
+  timeBlock: Task['timeBlock'];
+  targetTaskId?: number;
+}): Promise<Task[]> {
+  return db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(1, ${userId})`);
+    const [task] = await tx.select().from(tasks)
+      .where(and(eq(tasks.userId, userId), eq(tasks.id, input.id)));
+    if (!task) return [];
+
+    const destination = await tx.select().from(tasks)
+      .where(and(eq(tasks.userId, userId), eq(tasks.date, input.date), eq(tasks.timeBlock, input.timeBlock)))
+      .orderBy(asc(tasks.sortOrder), asc(tasks.createdAt), asc(tasks.id));
+    const changes = moveTaskWithinWeek(destination, task, input, input.targetTaskId);
+    if (changes.length === 0) return [];
+
+    const positions = sql.join(changes.map(item => sql`when ${item.id} then ${item.sortOrder}::integer`), sql` `);
+    return tx.update(tasks).set({
+      date: input.date,
+      timeBlock: input.timeBlock,
+      sortOrder: sql`case ${tasks.id} ${positions} else ${tasks.sortOrder} end`,
+      updatedAt: new Date(),
+    }).where(and(eq(tasks.userId, userId), inArray(tasks.id, changes.map(item => item.id)))).returning();
+  });
 }
 
 export async function updateTask(
@@ -113,40 +147,46 @@ export async function deleteTask(id: number, userId: number): Promise<boolean> {
 // ============ Note Operations ============
 
 export async function getNoteForWeek(userId: number, weekId: string): Promise<Note | null> {
-  const [note] = await db.select()
+  return findWeekNote(db, userId, getWeekStorageKeys(weekId));
+}
+
+async function findWeekNote(database: typeof db | Transaction, userId: number, keys: string[]) {
+  const rows = await database.select()
     .from(notes)
-    .where(and(eq(notes.userId, userId), eq(notes.weekId, weekId)))
-    .limit(1);
-  return note || null;
+    .where(and(eq(notes.userId, userId), inArray(notes.weekId, keys)))
+    .orderBy(asc(notes.id));
+  return selectWeekRecord(rows, keys);
 }
 
 export async function upsertNote(userId: number, weekId: string, content: string): Promise<Note> {
-  const existing = await getNoteForWeek(userId, weekId);
-  
-  if (existing) {
-    const result = await db
-      .update(notes)
-      .set({ content, updatedAt: new Date() })
-      .where(eq(notes.id, existing.id))
-      .returning();
-    return result[0];
-  } else {
-    const result = await db
-      .insert(notes)
-      .values({ userId, weekId, content })
-      .returning();
-    return result[0];
-  }
+  const keys = getWeekStorageKeys(weekId);
+  const [canonicalId] = keys;
+  return db.transaction(async tx => {
+    await lockWeekRecords(tx, userId, canonicalId);
+    const existing = await findWeekNote(tx, userId, keys);
+    if (existing?.weekId === canonicalId) {
+      const [updated] = await tx.update(notes).set({ content, updatedAt: new Date() })
+        .where(eq(notes.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await tx.insert(notes)
+      .values({ userId, weekId: canonicalId, content, createdAt: existing?.createdAt }).returning();
+    return created;
+  });
 }
 
 // ============ Week Settings Operations ============
 
 export async function getWeekSettings(userId: number, weekId: string): Promise<WeekSettings | null> {
-  const [settings] = await db.select()
+  return findWeekSettings(db, userId, getWeekStorageKeys(weekId));
+}
+
+async function findWeekSettings(database: typeof db | Transaction, userId: number, keys: string[]) {
+  const rows = await database.select()
     .from(weekSettings)
-    .where(and(eq(weekSettings.userId, userId), eq(weekSettings.weekId, weekId)))
-    .limit(1);
-  return settings || null;
+    .where(and(eq(weekSettings.userId, userId), inArray(weekSettings.weekId, keys)))
+    .orderBy(asc(weekSettings.id));
+  return selectWeekRecord(rows, keys);
 }
 
 export async function upsertWeekSettings(
@@ -155,44 +195,24 @@ export async function upsertWeekSettings(
   columnWidths?: Record<number, number>,
   rowHeights?: Record<number, number>
 ): Promise<WeekSettings> {
-  const existing = await getWeekSettings(userId, weekId);
-  
-  const columnWidthsJson = columnWidths ? JSON.stringify(columnWidths) : null;
-  const rowHeightsJson = rowHeights ? JSON.stringify(rowHeights) : null;
-  
-  if (existing) {
-    const updateData: Record<string, unknown> = { updatedAt: new Date() };
-    if (columnWidths !== undefined) updateData.columnWidths = columnWidthsJson;
-    if (rowHeights !== undefined) updateData.rowHeights = rowHeightsJson;
-    
-    const result = await db
-      .update(weekSettings)
-      .set(updateData)
-      .where(eq(weekSettings.id, existing.id))
-      .returning();
-    return result[0];
-  } else {
-    const result = await db
-      .insert(weekSettings)
-      .values({
-        userId,
-        weekId,
-        columnWidths: columnWidthsJson,
-        rowHeights: rowHeightsJson,
-      })
-      .returning();
-    return result[0];
-  }
+  return saveWeekSettings(userId, weekId, {
+    columnWidths: columnWidths === undefined ? undefined : JSON.stringify(columnWidths),
+    rowHeights: rowHeights === undefined ? undefined : JSON.stringify(rowHeights),
+  });
 }
 
 // ============ Weekly Summary Operations ============
 
 export async function getWeeklySummary(userId: number, weekId: string): Promise<WeeklySummary | null> {
-  const [summary] = await db.select()
+  return findWeeklySummary(db, userId, getWeekStorageKeys(weekId));
+}
+
+async function findWeeklySummary(database: typeof db | Transaction, userId: number, keys: string[]) {
+  const rows = await database.select()
     .from(weeklySummaries)
-    .where(and(eq(weeklySummaries.userId, userId), eq(weeklySummaries.weekId, weekId)))
-    .limit(1);
-  return summary || null;
+    .where(and(eq(weeklySummaries.userId, userId), inArray(weeklySummaries.weekId, keys)))
+    .orderBy(asc(weeklySummaries.id));
+  return selectWeekRecord(rows, keys);
 }
 
 export async function upsertWeeklySummary(
@@ -201,36 +221,37 @@ export async function upsertWeeklySummary(
   data: {
     keyword?: string | null;
     dailyEntries?: string | null;
+    dailyEntryChanges?: DailyEntries;
     reflection?: string | null;
   }
 ): Promise<WeeklySummary> {
-  const existing = await getWeeklySummary(userId, weekId);
+  const keys = getWeekStorageKeys(weekId);
+  const [canonicalId] = keys;
+  return db.transaction(async tx => {
+    // Serialize creation and per-day merges even when the week has no row yet.
+    await lockWeekRecords(tx, userId, canonicalId);
+    const existing = await findWeeklySummary(tx, userId, keys);
+    const dailyEntries = data.dailyEntryChanges
+      ? JSON.stringify({ ...parseDailyEntries(existing?.dailyEntries), ...data.dailyEntryChanges })
+      : data.dailyEntries;
+    const changes = { keyword: data.keyword, dailyEntries, reflection: data.reflection };
 
-  if (existing) {
-    const updateData: Record<string, unknown> = { updatedAt: new Date() };
-    if (data.keyword !== undefined) updateData.keyword = data.keyword;
-    if (data.dailyEntries !== undefined) updateData.dailyEntries = data.dailyEntries;
-    if (data.reflection !== undefined) updateData.reflection = data.reflection;
-
-    const result = await db
-      .update(weeklySummaries)
-      .set(updateData)
-      .where(eq(weeklySummaries.id, existing.id))
-      .returning();
-    return result[0];
-  } else {
-    const result = await db
-      .insert(weeklySummaries)
-      .values({
-        userId,
-        weekId,
-        keyword: data.keyword ?? null,
-        dailyEntries: data.dailyEntries ?? null,
-        reflection: data.reflection ?? null,
-      })
-      .returning();
-    return result[0];
-  }
+    if (existing?.weekId === canonicalId) {
+      const [updated] = await tx.update(weeklySummaries)
+        .set({ ...changes, updatedAt: new Date() })
+        .where(eq(weeklySummaries.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await tx.insert(weeklySummaries).values({
+      userId,
+      weekId: canonicalId,
+      keyword: changes.keyword === undefined ? existing?.keyword : changes.keyword,
+      dailyEntries: changes.dailyEntries === undefined ? existing?.dailyEntries : changes.dailyEntries,
+      reflection: changes.reflection === undefined ? existing?.reflection : changes.reflection,
+      createdAt: existing?.createdAt,
+    }).returning();
+    return created;
+  });
 }
 
 // ============ Custom Content Operations ============
@@ -241,29 +262,33 @@ export async function updateCustomContent(
   customText?: string | null,
   customImageUrl?: string | null
 ): Promise<WeekSettings> {
-  const existing = await getWeekSettings(userId, weekId);
+  return saveWeekSettings(userId, weekId, { customText, customImageUrl });
+}
 
-  if (existing) {
-    const updateData: Record<string, unknown> = { updatedAt: new Date() };
-    if (customText !== undefined) updateData.customText = customText;
-    if (customImageUrl !== undefined) updateData.customImageUrl = customImageUrl;
-
-    const result = await db
-      .update(weekSettings)
-      .set(updateData)
-      .where(eq(weekSettings.id, existing.id))
-      .returning();
-    return result[0];
-  } else {
-    const result = await db
-      .insert(weekSettings)
-      .values({
-        userId,
-        weekId,
-        customText: customText ?? null,
-        customImageUrl: customImageUrl ?? null,
-      })
-      .returning();
-    return result[0];
-  }
+async function saveWeekSettings(
+  userId: number,
+  weekId: string,
+  changes: Partial<Pick<WeekSettings, 'customText' | 'customImageUrl' | 'columnWidths' | 'rowHeights'>>
+): Promise<WeekSettings> {
+  const keys = getWeekStorageKeys(weekId);
+  const [canonicalId] = keys;
+  return db.transaction(async tx => {
+    await lockWeekRecords(tx, userId, canonicalId);
+    const existing = await findWeekSettings(tx, userId, keys);
+    if (existing?.weekId === canonicalId) {
+      const [updated] = await tx.update(weekSettings).set({ ...changes, updatedAt: new Date() })
+        .where(eq(weekSettings.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await tx.insert(weekSettings).values({
+      userId,
+      weekId: canonicalId,
+      customText: changes.customText === undefined ? existing?.customText : changes.customText,
+      customImageUrl: changes.customImageUrl === undefined ? existing?.customImageUrl : changes.customImageUrl,
+      columnWidths: changes.columnWidths === undefined ? existing?.columnWidths : changes.columnWidths,
+      rowHeights: changes.rowHeights === undefined ? existing?.rowHeights : changes.rowHeights,
+      createdAt: existing?.createdAt,
+    }).returning();
+    return created;
+  });
 }

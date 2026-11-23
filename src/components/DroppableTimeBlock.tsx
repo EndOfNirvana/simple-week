@@ -28,10 +28,9 @@ export function DroppableTimeBlock({
   const [isAdding, setIsAdding] = useState(false);
   const [newValue, setNewValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const droppableId = `${date}-${timeBlock}`;
-  const { setNodeRef, isOver } = useDroppable({ id: droppableId });
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId, data: { location: { date, timeBlock } } });
 
   useEffect(() => {
     if (isAdding && textareaRef.current) {
@@ -89,22 +88,21 @@ export function DroppableTimeBlock({
 
   return (
     <div 
-      ref={(node) => {
-        setNodeRef(node);
-        (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-      }}
+      ref={setNodeRef}
       className={cn(
-        "h-full min-h-[120px] p-2 transition-colors relative group flex flex-col overflow-hidden",
-        isOver ? "bg-primary/10" : "hover:bg-accent/20"
+        "group/block relative flex min-h-0 flex-col overflow-auto p-1.5 transition-colors md:p-2",
+        isOver ? "bg-primary/10" : "hover:bg-accent/25"
       )}
       onClick={(e) => {
-        if (e.target === containerRef.current) {
+        if (e.target === e.currentTarget) {
           setIsAdding(true);
         }
       }}
     >
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 space-y-1">
+        <div className="flex-1 space-y-1.5" onClick={(event) => {
+          if (event.target === event.currentTarget) setIsAdding(true);
+        }}>
           {blockTasks.map(task => (
             <DraggableTaskItem
               key={task.id}
@@ -116,7 +114,7 @@ export function DroppableTimeBlock({
           ))}
           
           {isAdding ? (
-            <div className="flex items-start gap-2 p-1 -ml-1 animate-in fade-in duration-200">
+            <div className="flex rounded-lg border border-primary/40 bg-card px-2 py-1.5 shadow-xs">
               <textarea
                 ref={textareaRef}
                 value={newValue}
@@ -128,15 +126,16 @@ export function DroppableTimeBlock({
                 onKeyDown={handleKeyDown}
                 placeholder="输入任务... (Shift+Enter换行)"
                 rows={1}
-                className="flex-1 bg-transparent border-b border-primary outline-none text-sm resize-none overflow-hidden leading-tight"
+                aria-label="新任务"
+                className="w-full min-w-0 resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none"
               />
             </div>
           ) : (
             <button
               onClick={() => setIsAdding(true)}
               className={cn(
-                "w-full text-left text-xs text-muted-foreground/50 hover:text-primary py-1 px-1 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all",
-                blockTasks.length === 0 && "opacity-100 text-muted-foreground/30"
+                "flex min-h-7 w-full items-center gap-1 rounded-md px-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-primary focus-visible:outline-2",
+                blockTasks.length > 0 && "[@media(hover:hover)]:opacity-0 group-hover/block:opacity-100 focus-visible:opacity-100"
               )}
             >
               <Plus className="h-3 w-3" /> 添加任务

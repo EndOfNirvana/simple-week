@@ -4,7 +4,7 @@ import {
   DragEndEvent, 
   DragOverlay,
   DragStartEvent,
-  closestCenter,
+  pointerWithin,
   PointerSensor,
   useSensor,
   useSensors,
@@ -19,10 +19,11 @@ import {
   isToday
 } from '../lib/date-utils';
 import { usePlannerStore } from '../hooks/usePlannerStore';
+import { useSummaryStore } from '../hooks/useSummaryStore';
 import { DroppableTimeBlock } from './DroppableTimeBlock';
 import { YearWeekPicker } from './YearWeekPicker';
 import { CustomContentArea } from './CustomContentArea';
-import { ChevronLeft, ChevronRight, Loader2, Image as ImageIcon, BookOpen, CalendarDays } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Download, BookOpen, CalendarDays, Moon, NotebookPen, Sun, Sunset } from 'lucide-react';
 import { WeeklySummaryView } from './WeeklySummaryView';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -39,8 +40,13 @@ const MAX_COLUMN_WIDTH = 400;
 
 // Mobile breakpoint
 const MOBILE_BREAKPOINT = 768;
+const TIME_LABELS = [
+  { icon: Sun, label: '上午' },
+  { icon: Sunset, label: '下午' },
+  { icon: Moon, label: '晚上' },
+];
 
-export function WeeklyView() {
+export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [localColumnWidths, setLocalColumnWidths] = useState<Record<number, number>>({});
@@ -64,15 +70,15 @@ export function WeeklyView() {
     deleteTask, 
     moveTask,
     updateNote,
+    weekId,
     columnWidths,
     updateColumnWidth,
     customText,
     customImageUrl,
     updateCustomText,
-    uploadCustomImage,
     clearCustomImage,
-    isUploadingImage,
   } = usePlannerStore(currentDate);
+  const summary = useSummaryStore(weekId, viewMode === 'summary');
 
   // Check if mobile
   useEffect(() => {
@@ -151,7 +157,7 @@ export function WeeklyView() {
   
   useEffect(() => {
     setNoteContent(note?.content || '');
-  }, [note]);
+  }, [weekId, note?.content]);
 
   const handleNoteBlur = () => {
     if (noteContent !== (note?.content || '')) {
@@ -171,22 +177,12 @@ export function WeeklyView() {
     const { active, over } = event;
     setActiveTask(null);
 
-    if (!over) return;
-
-    const taskId = active.id as number;
-    const overId = over.id as string;
-    
-    // Parse the droppable ID (format: "YYYY-MM-DD-timeBlock")
-    const parts = overId.split('-');
-    if (parts.length >= 4) {
-      const newDate = parts.slice(0, 3).join('-');
-      const newTimeBlock = parts[3] as TimeBlock;
-      
-      const task = tasks.find(t => t.id === taskId);
-      if (task && (task.date !== newDate || task.timeBlock !== newTimeBlock)) {
-        moveTask(taskId, newDate, newTimeBlock);
-      }
-    }
+    if (!over || active.id === over.id || typeof active.id !== 'number' || active.id <= 0) return;
+    const targetTask = typeof over.id === 'number' ? tasks.find(task => task.id === over.id) : undefined;
+    const destination: { date: string; timeBlock: TimeBlock } | undefined =
+      targetTask ?? over.data.current?.location;
+    if (!destination || (targetTask && targetTask.id <= 0)) return;
+    moveTask(active.id, destination.date, destination.timeBlock, targetTask?.id);
   };
 
   // Column resize handlers (desktop only)
@@ -243,12 +239,7 @@ export function WeeklyView() {
     toast.info('正在生成图片...');
     
     try {
-      // 临时隐藏不需要导出的元素
-      const buttonsToHide = exportContainerRef.current.querySelectorAll('[data-export-hide]');
-      buttonsToHide.forEach(el => (el as HTMLElement).style.visibility = 'hidden');
-      
       const dataUrl = await toPng(exportContainerRef.current, {
-        backgroundColor: '#ffffff',
         pixelRatio: 2,
         style: {
           transform: 'scale(1)',
@@ -261,9 +252,6 @@ export function WeeklyView() {
           return true;
         }
       });
-      
-      // 恢复隐藏的元素
-      buttonsToHide.forEach(el => (el as HTMLElement).style.visibility = 'visible');
       
       const link = document.createElement('a');
       const weekTitle = formatWeekDisplay(currentDate);
@@ -291,118 +279,79 @@ export function WeeklyView() {
   // Mobile-specific widths
   const mobileTimeLabelWidth = 50;
   const mobileColumnWidth = 130;
+  const viewTabs = [
+    { mode: 'planner', label: '周计划', icon: CalendarDays },
+    { mode: 'summary', label: '周总结', icon: BookOpen },
+  ] as const;
 
   return (
     <>
-    <div ref={exportContainerRef} className="flex flex-col h-screen max-h-screen overflow-hidden bg-background text-foreground font-sans">
-      {/* Header */}
-      <header className={cn(
-        "flex items-center justify-between border-b border-border bg-background z-10",
-        isMobile ? "px-3 py-2 flex-wrap gap-2" : "px-6 py-4"
-      )}>
-        <div className="flex items-center gap-2 md:gap-4">
-          <button
-            onClick={() => setShowYearPicker(true)}
-            className={cn(
-              "font-bold tracking-tight text-primary hover:text-primary/80 transition-colors cursor-pointer",
-              isMobile ? "text-lg" : "text-2xl"
+    <div ref={exportContainerRef} className="week-workspace flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+      <header className="shrink-0 border-b bg-card">
+        <div className="week-container week-toolbar">
+          <div className="week-brand flex items-center gap-2">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"><CalendarDays aria-hidden="true" className="size-4" /></span>
+            <span className="text-[17px] font-bold tracking-wide">简周</span>
+          </div>
+          <div className="week-period">
+            <h1>
+              <button onClick={() => setShowYearPicker(true)} aria-label={`选择周，当前${formatWeekDisplay(currentDate)}`}
+                className="flex items-center gap-1.5 rounded-lg text-left text-[16px] font-bold tracking-tight hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-4 sm:text-xl">
+                {formatWeekDisplay(currentDate)} <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+              </button>
+            </h1>
+            <p className="flex items-center gap-1 whitespace-nowrap text-xs font-medium tabular-nums text-muted-foreground">
+              {format(weekDays[0], 'yyyy.MM.dd')} — {format(weekDays[6], weekDays[0].getFullYear() === weekDays[6].getFullYear() ? 'MM.dd' : 'yyyy.MM.dd')}
+              {isLoading && <Loader2 aria-label="正在加载" className="size-3 shrink-0 animate-spin" />}
+            </p>
+          </div>
+
+          {viewMode === 'planner' && (
+            <CustomContentArea
+              key={weekId}
+              customText={customText}
+              customImageUrl={customImageUrl}
+              onUpdateText={updateCustomText}
+              onClearImage={clearCustomImage}
+              className="week-custom-content min-h-9 rounded-lg border border-dashed bg-background/45 px-9"
+              isMobile={isMobile}
+            />
+          )}
+
+          <div className="week-controls flex items-center justify-end gap-2" data-export-hide>
+            <div className="flex items-center gap-0.5 rounded-lg border bg-card p-0.5 shadow-xs">
+              <Button variant="ghost" size="icon-sm" onClick={handlePrevWeek} aria-label="上一周"><ChevronLeft /></Button>
+              <Button variant="ghost" size="sm" onClick={scrollToToday}>今天</Button>
+              <Button variant="ghost" size="icon-sm" onClick={handleNextWeek} aria-label="下一周"><ChevronRight /></Button>
+            </div>
+            {!isMobile && viewMode === 'planner' && (
+              <Button onClick={handleExportImage} className="h-9 rounded-lg"><Download />导出图片</Button>
             )}
-          >
-            {formatWeekDisplay(currentDate)}
-          </button>
-          <span className={cn(
-            "text-muted-foreground font-medium",
-            isMobile ? "text-xs" : "text-sm"
-          )}>
-            {format(weekDays[0], 'yyyy.MM.dd')} - {format(weekDays[6], 'MM.dd')}
-          </span>
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-        </div>
-        
-        {/* Custom content area - Desktop: in header, Mobile: replaces export button */}
-        {!isMobile && (
-          <div className="flex-1 mx-4 h-10">
-            <CustomContentArea
-              customText={customText}
-              customImageUrl={customImageUrl}
-              onUpdateText={updateCustomText}
-              onUploadImage={uploadCustomImage}
-              onClearImage={clearCustomImage}
-              isUploading={isUploadingImage}
-              className="h-full border border-transparent hover:border-border rounded-md px-3"
-            />
           </div>
-        )}
-        
-        {/* Mobile: Custom content area - takes remaining space */}
-        {isMobile && (
-          <div className="flex-1 h-8 mx-2">
-            <CustomContentArea
-              customText={customText}
-              customImageUrl={customImageUrl}
-              onUpdateText={updateCustomText}
-              onUploadImage={uploadCustomImage}
-              onClearImage={clearCustomImage}
-              isUploading={isUploadingImage}
-              className="h-full border border-dashed border-border/50 rounded px-2"
-              isMobile={true}
-            />
+          <div className="week-view-switch flex items-center gap-2" data-export-hide>
+            <nav aria-label="周视图" className="flex items-center gap-0.5 rounded-lg bg-secondary p-0.5 sm:gap-1 sm:p-1">
+              {viewTabs.map(({ mode, label, icon: Icon }) => (
+                <Button key={mode} variant="ghost" size="sm" aria-pressed={viewMode === mode}
+                  className={cn('rounded-md px-2 text-muted-foreground sm:px-3', viewMode === mode && 'bg-card text-primary shadow-xs hover:bg-card hover:text-primary')}
+                  onClick={() => setViewMode(mode)}>
+                  <Icon aria-hidden="true" className="hidden size-4 sm:block" />{label}
+                </Button>
+              ))}
+            </nav>
+            {accountMenu && <div className="flex shrink-0 items-center">{accountMenu}</div>}
           </div>
-        )}
-        
-        <div className="flex items-center gap-1 md:gap-2 mr-12" data-export-hide>
-          {/* Desktop: View toggle button */}
-          {!isMobile && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewMode(prev => prev === 'planner' ? 'summary' : 'planner')}
-              className="gap-2"
-            >
-              {viewMode === 'planner' ? (
-                <><BookOpen className="h-4 w-4" />周总结</>
-              ) : (
-                <><CalendarDays className="h-4 w-4" />周计划</>
-              )}
-            </Button>
-          )}
-          {/* Desktop: Export button - only show in planner mode */}
-          {!isMobile && viewMode === 'planner' && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleExportImage}
-              className="gap-2"
-            >
-              <ImageIcon className="h-4 w-4" />
-              导出图片
-            </Button>
-          )}
-          <Button 
-            variant="outline" 
-            size={isMobile ? "sm" : "sm"} 
-            onClick={scrollToToday}
-            className={isMobile ? "text-xs px-2" : ""}
-          >
-            今天
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handlePrevWeek} className={isMobile ? "h-8 w-8" : ""}>
-            <ChevronLeft className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleNextWeek} className={isMobile ? "h-8 w-8" : ""}>
-            <ChevronRight className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
-          </Button>
         </div>
       </header>
 
       {/* Main Content - conditionally render planner or summary */}
       {viewMode === 'summary' ? (
-        <WeeklySummaryView currentDate={currentDate} />
+        <WeeklySummaryView currentDate={currentDate} title={customText} onTitleChange={updateCustomText} summary={summary} />
       ) : (
-      <div ref={scrollContainerRef} className="flex-1 overflow-auto">
+      <main className="week-container flex min-h-0 flex-1 flex-col py-3 md:py-4">
+      <div ref={scrollContainerRef} className="week-board flex-1 overflow-auto rounded-xl border bg-card">
         <div 
           ref={plannerRef} 
-          className="h-full flex flex-col bg-background" 
+          className="flex h-full flex-col bg-card"
           style={{ 
             minWidth: isMobile 
               ? mobileTimeLabelWidth + totalDaysWidth 
@@ -410,12 +359,12 @@ export function WeeklyView() {
           }}
         >
           {/* Days Header */}
-          <div className="flex border-b border-border sticky top-0 bg-background z-10">
+          <div className="sticky top-0 z-10 flex shrink-0 border-b bg-card">
             {/* Corner */}
             <div 
-              className="p-2 md:p-4 border-r border-border bg-secondary/30 shrink-0"
+              className="week-time-column grid shrink-0 place-items-center border-r bg-secondary/60 text-xs font-medium text-muted-foreground"
               style={{ width: isMobile ? mobileTimeLabelWidth : TIME_LABEL_WIDTH }}
-            />
+            >时段</div>
             
             {/* Day columns */}
             {weekDays.map((day, index) => {
@@ -425,8 +374,8 @@ export function WeeklyView() {
                 <div 
                   key={day.toString()} 
                   className={cn(
-                    "relative p-2 md:p-3 text-center border-r border-border shrink-0",
-                    isTodayColumn && "bg-primary/5"
+                    "relative min-w-0 shrink-0 border-r px-3 py-3 text-center md:grow",
+                    isTodayColumn ? "bg-accent" : index > 4 && "bg-secondary/35"
                   )}
                   style={{ width }}
                 >
@@ -436,10 +385,7 @@ export function WeeklyView() {
                   )}>
                     {getDayLabel(day)}
                   </div>
-                  <div className={cn(
-                    "text-lg md:text-2xl font-bold mt-0.5 md:mt-1", 
-                    isTodayColumn && "text-primary"
-                  )}>
+                  <div className={cn('mx-auto mt-1 inline-flex h-8 items-center rounded-full px-2.5 text-xl font-semibold tabular-nums leading-none md:text-[22px]', isTodayColumn && 'bg-primary text-primary-foreground')}>
                     {getDateLabel(day)}
                   </div>
                   
@@ -468,10 +414,10 @@ export function WeeklyView() {
             {/* Notes header - desktop only */}
             {!isMobile && (
               <div 
-                className="p-3 text-center font-bold text-muted-foreground bg-secondary/10 shrink-0"
+                className="flex shrink-0 items-center justify-center gap-2 bg-secondary/55 px-3 text-sm font-semibold text-primary"
                 style={{ width: NOTES_WIDTH }}
               >
-                备注
+                <NotebookPen aria-hidden="true" className="size-4" />本周备注
               </div>
             )}
           </div>
@@ -479,39 +425,27 @@ export function WeeklyView() {
           {/* Content Grid with DnD */}
           <DndContext 
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={pointerWithin}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveTask(null)}
           >
-            <div className="flex-1 flex h-full">
+            <div className="flex min-h-[390px] flex-1">
               
               {/* Left: Time Labels */}
               <div 
-                className="grid grid-rows-3 divide-y divide-border bg-secondary/5 h-full border-r border-border shrink-0"
+                className="week-time-column grid shrink-0 grid-rows-3 divide-y border-r bg-secondary/60"
                 style={{ width: isMobile ? mobileTimeLabelWidth : TIME_LABEL_WIDTH }}
               >
-                <div className={cn(
-                  "flex items-center justify-center font-medium text-muted-foreground",
-                  isMobile ? "text-xs py-4" : "writing-vertical-lr py-8"
-                )}>
-                  上午
-                </div>
-                <div className={cn(
-                  "flex items-center justify-center font-medium text-muted-foreground",
-                  isMobile ? "text-xs py-4" : "writing-vertical-lr py-8"
-                )}>
-                  下午
-                </div>
-                <div className={cn(
-                  "flex items-center justify-center font-medium text-muted-foreground",
-                  isMobile ? "text-xs py-4" : "writing-vertical-lr py-8"
-                )}>
-                  晚上
-                </div>
+                {TIME_LABELS.map(({ icon: Icon, label }) => (
+                  <div key={label} className="flex flex-col items-center justify-center gap-2 text-xs font-medium text-muted-foreground md:text-sm">
+                    <Icon aria-hidden="true" className="size-4 text-primary/75" />{label}
+                  </div>
+                ))}
               </div>
 
               {/* Center: 7 Days x 3 TimeBlocks */}
-              <div className="flex h-full">
+              <div className="flex min-w-0 flex-1">
                 {weekDays.map((day, index) => {
                   const dateStr = format(day, 'yyyy-MM-dd');
                   const dayTasks = tasks.filter(t => t.date === dateStr);
@@ -521,8 +455,8 @@ export function WeeklyView() {
                     <div 
                       key={day.toString()} 
                       className={cn(
-                        "relative grid grid-rows-3 divide-y divide-border h-full border-r border-border shrink-0",
-                        isToday(day) && "bg-primary/5"
+                        "relative grid min-w-0 shrink-0 grid-rows-3 divide-y border-r md:grow",
+                        isToday(day) ? "bg-accent/45" : index > 4 && "bg-secondary/20"
                       )}
                       style={{ width }}
                     >
@@ -573,7 +507,7 @@ export function WeeklyView() {
               {/* Right: Notes - desktop only */}
               {!isMobile && (
                 <div 
-                  className="bg-secondary/5 shrink-0 cursor-text flex flex-col h-full"
+                  className="flex shrink-0 cursor-text flex-col bg-secondary/30"
                   style={{ width: NOTES_WIDTH }}
                   onClick={(e) => {
                     // Click anywhere in the notes area to focus the textarea
@@ -588,7 +522,8 @@ export function WeeklyView() {
                     onChange={(e) => setNoteContent(e.target.value)}
                     onBlur={handleNoteBlur}
                     placeholder="本周备注..."
-                    className="w-full flex-1 p-4 bg-transparent resize-none outline-none text-sm leading-relaxed placeholder:text-muted-foreground/50 block min-h-0"
+                    aria-label="本周备注"
+                    className="block min-h-0 w-full flex-1 resize-none bg-transparent p-4 text-sm leading-7 outline-none placeholder:text-muted-foreground focus:bg-card/50"
                   />
                 </div>
               )}
@@ -604,6 +539,24 @@ export function WeeklyView() {
           </DndContext>
         </div>
       </div>
+      {isMobile && (
+        <details key={weekId} className="mt-2 shrink-0 rounded-lg border bg-card" data-export-hide>
+          <summary className="relative cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-primary focus-visible:outline-2">
+            本周备注
+            <span className="pointer-events-none absolute right-3 top-3 text-xs font-normal text-muted-foreground">左右滑动查看整周</span>
+          </summary>
+          <textarea
+            value={noteContent}
+            onChange={event => setNoteContent(event.target.value)}
+            onBlur={handleNoteBlur}
+            placeholder="本周备注..."
+            aria-label="本周备注"
+            rows={4}
+            className="block w-full resize-none border-t bg-transparent px-3 py-2 text-sm leading-6 outline-none placeholder:text-muted-foreground focus:bg-secondary/25"
+          />
+        </details>
+      )}
+      </main>
       )}
     </div>
       

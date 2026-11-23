@@ -59,7 +59,7 @@ export const notes = pgTable("notes", {
   id: serial("id").primaryKey(),
   /** User who owns this note */
   userId: integer("user_id").notNull(),
-  /** Week identifier (YYYY-Www format, e.g., 2026-W03) */
+  /** Monday date (YYYY-MM-DD). Legacy rows may use YYYY-Www. */
   weekId: varchar("week_id", { length: 10 }).notNull(),
   /** Note content */
   content: text("content"),
@@ -79,7 +79,7 @@ export const weekSettings = pgTable("week_settings", {
   id: serial("id").primaryKey(),
   /** User who owns this setting */
   userId: integer("user_id").notNull(),
-  /** Week identifier (YYYY-Www format, e.g., 2026-W03) */
+  /** Monday date (YYYY-MM-DD). Legacy rows may use YYYY-Www. */
   weekId: varchar("week_id", { length: 10 }).notNull(),
   /** Column widths as JSON string: {"0": 150, "1": 200, ...} for each day index */
   columnWidths: text("column_widths"),
@@ -105,7 +105,7 @@ export const weeklySummaries = pgTable("weekly_summaries", {
   id: serial("id").primaryKey(),
   /** User who owns this summary */
   userId: integer("user_id").notNull(),
-  /** Week identifier (YYYY-Www format, e.g., 2026-W07) */
+  /** Monday date (YYYY-MM-DD). Legacy rows may use YYYY-Www. */
   weekId: varchar("week_id", { length: 10 }).notNull(),
   /** Keyword/title for the week (e.g., "大爷去世") */
   keyword: text("keyword"),

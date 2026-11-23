@@ -1,126 +1,121 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { parseDailyEntries, type DailyEntries } from '../../shared/week-data';
 import { trpc } from '../lib/trpc';
-import { format, startOfWeek, getISOWeek, getYear } from 'date-fns';
-import { useCallback, useRef, useMemo } from 'react';
 
-// Debounce helper
-function debounce<T extends (...args: any[]) => any>(fn: T, delay: number) {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  return (...args: Parameters<T>) => {
-    if (timeoutId) clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), delay);
-  };
-}
+type SummaryChanges = {
+  dailyEntryChanges: DailyEntries;
+  reflection?: string | null;
+};
 
-export interface DailyEntries {
-  [key: string]: string; // "0" -> Monday content, "1" -> Tuesday content, etc.
-}
+type Draft = {
+  changes: SummaryChanges;
+  status: 'pending' | 'saving' | 'error';
+};
 
-export function useSummaryStore(currentDate: Date) {
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-  
-  const year = getYear(weekStart);
-  const weekNumber = getISOWeek(weekStart);
-  const weekId = `${year}-W${weekNumber.toString().padStart(2, '0')}`;
-
-  const summaryQuery = trpc.weeklySummary.get.useQuery(
-    { weekId },
-    { staleTime: 30000 }
-  );
-
+export function useSummaryStore(weekId: string, enabled: boolean) {
+  const query = trpc.weeklySummary.get.useQuery({ weekId }, { enabled, staleTime: 30000 });
   const utils = trpc.useUtils();
-
-  const upsertMutation = trpc.weeklySummary.upsert.useMutation({
-    onMutate: async (input) => {
-      await utils.weeklySummary.get.cancel({ weekId: input.weekId });
-      const previous = utils.weeklySummary.get.getData({ weekId: input.weekId });
-
-      utils.weeklySummary.get.setData({ weekId: input.weekId }, (old) => {
-        const base = old || {
-          id: 0,
-          userId: 0,
-          weekId: input.weekId,
-          keyword: null,
-          dailyEntries: null,
-          reflection: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        return {
-          ...base,
-          keyword: input.keyword !== undefined ? input.keyword ?? null : base.keyword,
-          dailyEntries: input.dailyEntries !== undefined ? input.dailyEntries ?? null : base.dailyEntries,
-          reflection: input.reflection !== undefined ? input.reflection ?? null : base.reflection,
-        };
-      });
-
-      return { previous };
-    },
-    onError: (err, input, context) => {
-      if (context?.previous !== undefined) {
-        utils.weeklySummary.get.setData({ weekId: input.weekId }, context.previous);
-      }
-    },
-    onSettled: () => {
-      utils.weeklySummary.get.invalidate({ weekId });
+  const { mutateAsync } = trpc.weeklySummary.upsert.useMutation({
+    onMutate: ({ weekId }) => utils.weeklySummary.get.cancel({ weekId }),
+    onSuccess: (summary, { weekId }) => {
+      utils.weeklySummary.get.setData({ weekId }, summary);
     },
   });
+  const drafts = useRef(new Map<string, Draft>());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const saving = useRef(new Set<string>());
+  const [draftState, setDraftState] = useState(() => new Map<string, Draft>());
 
-  // Debounced updates
-  const debouncedKeywordUpdate = useRef(
-    debounce((wId: string, keyword: string | null) => {
-      upsertMutation.mutate({ weekId: wId, keyword });
-    }, 500)
-  ).current;
+  function setDraft(id: string, draft?: Draft) {
+    if (draft) drafts.current.set(id, draft);
+    else drafts.current.delete(id);
+    setDraftState(new Map(drafts.current));
+  }
 
-  const debouncedDailyEntriesUpdate = useRef(
-    debounce((wId: string, dailyEntries: string) => {
-      upsertMutation.mutate({ weekId: wId, dailyEntries });
-    }, 500)
-  ).current;
+  function cancelTimer(id: string) {
+    clearTimeout(timers.current.get(id));
+    timers.current.delete(id);
+  }
 
-  const debouncedReflectionUpdate = useRef(
-    debounce((wId: string, reflection: string | null) => {
-      upsertMutation.mutate({ weekId: wId, reflection });
-    }, 500)
-  ).current;
+  async function saveWeek(id: string) {
+    const draft = drafts.current.get(id);
+    if (!draft || saving.current.has(id)) return;
 
-  const updateKeyword = useCallback((keyword: string | null) => {
-    debouncedKeywordUpdate(weekId, keyword);
-  }, [weekId, debouncedKeywordUpdate]);
+    cancelTimer(id);
+    saving.current.add(id);
+    setDraft(id, { ...draft, status: 'saving' });
+    const submitted = draft.changes;
 
-  const updateDailyEntry = useCallback((dayIndex: number, content: string) => {
-    // Parse existing entries, update the specific day, and save
-    const currentEntries: DailyEntries = summaryQuery.data?.dailyEntries
-      ? JSON.parse(summaryQuery.data.dailyEntries)
-      : {};
-    const newEntries = { ...currentEntries, [dayIndex.toString()]: content };
-    debouncedDailyEntriesUpdate(weekId, JSON.stringify(newEntries));
-  }, [weekId, summaryQuery.data?.dailyEntries, debouncedDailyEntriesUpdate]);
-
-  const updateReflection = useCallback((reflection: string | null) => {
-    debouncedReflectionUpdate(weekId, reflection);
-  }, [weekId, debouncedReflectionUpdate]);
-
-  // Parse daily entries from JSON
-  const dailyEntries: DailyEntries = useMemo(() => {
-    if (summaryQuery.data?.dailyEntries) {
-      try {
-        return JSON.parse(summaryQuery.data.dailyEntries);
-      } catch {
-        return {};
+    try {
+      await mutateAsync({
+        weekId: id,
+        dailyEntryChanges: Object.keys(submitted.dailyEntryChanges).length ? submitted.dailyEntryChanges : undefined,
+        reflection: submitted.reflection,
+      });
+      const latest = (drafts.current.get(id) ?? draft).changes;
+      const dailyEntryChanges = { ...latest.dailyEntryChanges };
+      for (const [day, content] of Object.entries(submitted.dailyEntryChanges)) {
+        if (dailyEntryChanges[day] === content) delete dailyEntryChanges[day];
       }
+      const reflection = latest.reflection === submitted.reflection ? undefined : latest.reflection;
+      if (Object.keys(dailyEntryChanges).length || reflection !== undefined) {
+        setDraft(id, { status: 'pending', changes: { dailyEntryChanges, reflection } });
+      } else {
+        cancelTimer(id);
+        setDraft(id);
+      }
+    } catch {
+      cancelTimer(id);
+      const latest = drafts.current.get(id) ?? draft;
+      setDraft(id, { ...latest, status: 'error' });
+    } finally {
+      saving.current.delete(id);
     }
-    return {};
-  }, [summaryQuery.data?.dailyEntries]);
+
+    if (drafts.current.get(id)?.status === 'pending' && !timers.current.has(id)) {
+      void saveWeek(id);
+    }
+  }
+
+  function updateChanges(update: (changes: SummaryChanges) => SummaryChanges) {
+    const changes = drafts.current.get(weekId)?.changes ?? { dailyEntryChanges: {} };
+    setDraft(weekId, { status: 'pending', changes: update(changes) });
+    cancelTimer(weekId);
+    timers.current.set(weekId, setTimeout(() => {
+      timers.current.delete(weekId);
+      void saveWeek(weekId);
+    }, 500));
+  }
+
+  const hasUnsavedChanges = draftState.size > 0;
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasUnsavedChanges]);
+
+  const draft = draftState.get(weekId);
+  const dailyEntries = useMemo(() => ({
+    ...parseDailyEntries(query.data?.dailyEntries),
+    ...draft?.changes.dailyEntryChanges,
+  }), [query.data?.dailyEntries, draft?.changes.dailyEntryChanges]);
 
   return {
-    keyword: summaryQuery.data?.keyword ?? '',
     dailyEntries,
-    reflection: summaryQuery.data?.reflection ?? '',
-    isLoading: summaryQuery.isLoading,
-    updateKeyword,
-    updateDailyEntry,
-    updateReflection,
-    weekId,
+    reflection: draft?.changes.reflection !== undefined ? draft.changes.reflection ?? '' : query.data?.reflection ?? '',
+    isLoading: query.isLoading,
+    loadFailed: query.isError && query.data === undefined,
+    retryLoad: () => { void query.refetch(); },
+    saveStatus: draft?.status ?? 'idle',
+    retrySave: () => { void saveWeek(weekId); },
+    updateDailyEntry: (dayIndex: number, content: string) => updateChanges(changes => ({
+      ...changes,
+      dailyEntryChanges: { ...changes.dailyEntryChanges, [dayIndex]: content },
+    })),
+    updateReflection: (reflection: string | null) => updateChanges(changes => ({ ...changes, reflection })),
   };
 }

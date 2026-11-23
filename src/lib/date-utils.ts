@@ -6,18 +6,10 @@ import {
   addWeeks, 
   subWeeks, 
   getISOWeek, 
-  getYear,
+  getISOWeekYear,
   isSameDay,
-  parseISO,
-  startOfToday
 } from 'date-fns';
 import { zhCN } from 'date-fns/locale/zh-CN';
-
-export const getWeekId = (date: Date): string => {
-  const year = getYear(date);
-  const week = getISOWeek(date);
-  return `${year}-W${week.toString().padStart(2, '0')}`;
-};
 
 export const getWeekDays = (date: Date) => {
   const start = startOfWeek(date, { weekStartsOn: 1 }); // Week starts on Monday
@@ -27,7 +19,7 @@ export const getWeekDays = (date: Date) => {
 };
 
 export const formatWeekDisplay = (date: Date): string => {
-  const year = getYear(date);
+  const year = getISOWeekYear(date);
   const week = getISOWeek(date);
   return `${year}年 第${week}周`;
 };

@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useState, useRef, useEffect } from 'react';
 import { Task } from '../lib/types';
-import { Trash2 } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface DraggableTaskItemProps {
@@ -92,7 +92,7 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
 
   if (isEditing) {
     return (
-      <div ref={setNodeRef} style={style} className="flex items-start gap-1.5 p-1 -ml-1">
+      <div ref={setNodeRef} style={style} className="flex rounded-lg border border-primary/40 bg-card px-2 py-1.5 shadow-xs">
         <textarea
           ref={textareaRef}
           value={editValue}
@@ -103,7 +103,8 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
           onBlur={handleSave}
           onKeyDown={handleKeyDown}
           rows={1}
-          className="flex-1 bg-transparent border-b border-primary outline-none text-sm font-medium resize-none overflow-hidden leading-tight"
+          aria-label="编辑任务"
+          className="w-full min-w-0 resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none"
         />
       </div>
     );
@@ -113,7 +114,7 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     <div 
       ref={setNodeRef} 
       style={style}
-      className="group flex items-start gap-1.5 py-1 text-sm animate-in fade-in duration-200"
+      className={cn('group/task flex items-start gap-1.5 rounded-lg border px-1.5 py-2 text-sm transition-colors', isCompleted ? 'border-border/80 bg-secondary/45' : 'border-primary/15 bg-accent/70 hover:bg-accent')}
     >
       {/* Drag handle: the dot indicator area */}
       <button
@@ -125,37 +126,40 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
           onToggle(task.id);
         }}
         className={cn(
-          "mt-1 flex h-3 w-3 shrink-0 items-center justify-center rounded-full border transition-all cursor-grab active:cursor-grabbing",
+          "mt-0.5 flex size-4 shrink-0 touch-none cursor-grab items-center justify-center rounded-full border transition-colors focus-visible:outline-2 active:cursor-grabbing",
           isCompleted
             ? "bg-primary border-primary"
-            : "border-muted-foreground/40 hover:border-primary bg-transparent"
+            : "border-primary/55 hover:border-primary bg-card"
         )}
         title={isCompleted ? "点击取消完成" : "点击标记完成 | 拖动排序"}
+        aria-label={isCompleted ? '取消完成' : '标记完成'}
+        aria-pressed={isCompleted}
       >
         {isCompleted && (
-          <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+          <Check aria-hidden="true" className="size-2.5 text-primary-foreground" />
         )}
       </button>
       
-      <span 
+      <button type="button"
         onClick={(e) => {
           e.stopPropagation();
           setIsEditing(true);
         }}
         className={cn(
-          "flex-1 cursor-text break-all whitespace-pre-wrap leading-tight transition-opacity min-w-0",
-          isCompleted && "line-through text-muted-foreground opacity-60"
+          "min-w-0 flex-1 cursor-text whitespace-pre-wrap text-left text-[13px] leading-5 [overflow-wrap:anywhere] focus-visible:outline-2 md:text-sm",
+          isCompleted && "text-muted-foreground line-through"
         )}
       >
         {task.content}
-      </span>
+      </button>
 
       <button
         onClick={(e) => {
           e.stopPropagation();
           onDelete(task.id);
         }}
-        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10 p-0.5 rounded shrink-0"
+        aria-label="删除任务"
+        className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 group-hover/task:opacity-100"
       >
         <Trash2 className="h-3 w-3" />
       </button>
