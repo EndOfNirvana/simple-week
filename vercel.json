@@ -13,5 +13,10 @@
     "api/server.js": {
       "maxDuration": 10
     }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "preview-week-planner-upgrade": false
+    }
   }
 }
