@@ -31,6 +31,7 @@ import { format } from 'date-fns';
 import { toPng } from 'html-to-image';
 import { toast } from 'sonner';
 import { Task, TimeBlock } from '../lib/types';
+import { MIN_TIME_BLOCK_HEIGHT, type TimeBlockHeights } from '../../shared/week-data';
 
 // Default widths
 const TIME_LABEL_WIDTH = 80;
@@ -45,12 +46,25 @@ const TIME_LABELS = [
   { icon: Sunset, label: '下午' },
   { icon: Moon, label: '晚上' },
 ];
+const ROW_DIVIDERS = [0, 1] as const;
+const DEFAULT_ROW_WEIGHTS: TimeBlockHeights = [1, 1, 1];
+
+function resizeTimeBlocks(heights: TimeBlockHeights, divider: 0 | 1, offset: number): TimeBlockHeights {
+  const next: TimeBlockHeights = [...heights];
+  const lower = divider + 1;
+  const delta = Math.max(MIN_TIME_BLOCK_HEIGHT - heights[divider],
+    Math.min(heights[lower] - MIN_TIME_BLOCK_HEIGHT, Math.round(offset)));
+  next[divider] += delta;
+  next[lower] -= delta;
+  return next;
+}
 
 export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [localColumnWidths, setLocalColumnWidths] = useState<Record<number, number>>({});
   const [resizingColumn, setResizingColumn] = useState<number | null>(null);
+  const [rowDrag, setRowDrag] = useState<{ weekId: string; divider: 0 | 1; heights: TimeBlockHeights } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [viewMode, setViewMode] = useState<'planner' | 'summary'>('planner');
@@ -59,6 +73,8 @@ export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const resizeStartX = useRef(0);
   const resizeStartWidth = useRef(0);
+  const timeRowsRef = useRef<HTMLDivElement>(null);
+  const resizeRowStart = useRef<{ pointerId: number; weekId: string; y: number; heights: TimeBlockHeights } | null>(null);
   
   const { 
     tasks, 
@@ -73,12 +89,17 @@ export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
     weekId,
     columnWidths,
     updateColumnWidth,
+    rowHeights,
+    updateRowHeights,
     customText,
     customImageUrl,
     updateCustomText,
     clearCustomImage,
   } = usePlannerStore(currentDate);
   const summary = useSummaryStore(weekId, viewMode === 'summary');
+  const rowWeights = (rowDrag?.weekId === weekId ? rowDrag.heights : rowHeights) ?? DEFAULT_ROW_WEIGHTS;
+  const gridTemplateRows = rowWeights.map(weight => `minmax(${MIN_TIME_BLOCK_HEIGHT}px, ${weight}fr)`).join(' ');
+  const totalRowWeight = rowWeights.reduce((total, weight) => total + weight, 0);
 
   // Check if mobile
   useEffect(() => {
@@ -232,6 +253,16 @@ export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
     };
   }, [resizingColumn, handleResizeMove, handleResizeEnd]);
 
+  function readTimeBlockHeights(): TimeBlockHeights | null {
+    const rows = timeRowsRef.current?.children;
+    if (rows?.length !== 3) return null;
+    return [
+      Math.round(rows[0].getBoundingClientRect().height),
+      Math.round(rows[1].getBoundingClientRect().height),
+      Math.round(rows[2].getBoundingClientRect().height),
+    ];
+  }
+
   // Export to image (desktop only)
   const handleExportImage = useCallback(async () => {
     if (!exportContainerRef.current) return;
@@ -313,8 +344,7 @@ export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
               customImageUrl={customImageUrl}
               onUpdateText={updateCustomText}
               onClearImage={clearCustomImage}
-              className="week-custom-content min-h-9 rounded-lg border border-dashed bg-background/45 px-9"
-              isMobile={isMobile}
+              className="week-custom-content"
             />
           )}
 
@@ -430,12 +460,13 @@ export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
             onDragEnd={handleDragEnd}
             onDragCancel={() => setActiveTask(null)}
           >
-            <div className="flex min-h-[390px] flex-1">
+            <div className="relative flex min-h-[390px] flex-1">
               
               {/* Left: Time Labels */}
               <div 
-                className="week-time-column grid shrink-0 grid-rows-3 divide-y border-r bg-secondary/60"
-                style={{ width: isMobile ? mobileTimeLabelWidth : TIME_LABEL_WIDTH }}
+                ref={timeRowsRef}
+                className="week-time-column grid shrink-0 divide-y border-r bg-secondary/60"
+                style={{ width: isMobile ? mobileTimeLabelWidth : TIME_LABEL_WIDTH, gridTemplateRows }}
               >
                 {TIME_LABELS.map(({ icon: Icon, label }) => (
                   <div key={label} className="flex flex-col items-center justify-center gap-2 text-xs font-medium text-muted-foreground md:text-sm">
@@ -455,10 +486,10 @@ export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
                     <div 
                       key={day.toString()} 
                       className={cn(
-                        "relative grid min-w-0 shrink-0 grid-rows-3 divide-y border-r md:grow",
+                        "relative grid min-w-0 shrink-0 divide-y border-r md:grow",
                         isToday(day) ? "bg-accent/45" : index > 4 && "bg-secondary/20"
                       )}
-                      style={{ width }}
+                      style={{ width, gridTemplateRows }}
                     >
                       <DroppableTimeBlock 
                         date={dateStr}
@@ -504,6 +535,64 @@ export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
                 })}
               </div>
 
+              <div
+                className="pointer-events-none absolute inset-y-0 left-0 z-[5] grid"
+                style={{ right: isMobile ? 0 : NOTES_WIDTH, gridTemplateRows }}
+                data-export-hide
+              >
+                {ROW_DIVIDERS.map(divider => (
+                  <div
+                    key={divider}
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label={`调整${TIME_LABELS[divider].label}和${TIME_LABELS[divider + 1].label}的高度`}
+                    aria-valuenow={Math.round(rowWeights.slice(0, divider + 1).reduce((sum, height) => sum + height, 0) / totalRowWeight * 100)}
+                    tabIndex={0}
+                    className={cn(
+                      'pointer-events-auto relative h-3 translate-y-1/2 touch-none cursor-row-resize self-end outline-none',
+                      'after:absolute after:inset-x-0 after:top-1/2 after:h-0.5 after:bg-transparent hover:after:bg-primary/50 focus-visible:after:bg-primary',
+                      rowDrag?.divider === divider && 'after:bg-primary'
+                    )}
+                    onPointerDown={event => {
+                      if (event.button !== 0 || !event.isPrimary || resizeRowStart.current) return;
+                      const heights = readTimeBlockHeights();
+                      if (!heights) return;
+                      event.preventDefault();
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      resizeRowStart.current = { pointerId: event.pointerId, weekId, y: event.clientY, heights };
+                      setRowDrag({ weekId, divider, heights });
+                    }}
+                    onPointerMove={event => {
+                      const start = resizeRowStart.current;
+                      if (start?.pointerId !== event.pointerId || start.weekId !== weekId) return;
+                      setRowDrag({ weekId, divider, heights: resizeTimeBlocks(start.heights, divider, event.clientY - start.y) });
+                    }}
+                    onPointerUp={event => {
+                      const start = resizeRowStart.current;
+                      if (start?.pointerId !== event.pointerId) return;
+                      resizeRowStart.current = null;
+                      setRowDrag(null);
+                      if (start.weekId !== weekId) return;
+                      const heights = resizeTimeBlocks(start.heights, divider, event.clientY - start.y);
+                      if (heights[divider] !== start.heights[divider]) void updateRowHeights(heights);
+                    }}
+                    onLostPointerCapture={event => {
+                      if (resizeRowStart.current?.pointerId !== event.pointerId) return;
+                      resizeRowStart.current = null;
+                      setRowDrag(null);
+                    }}
+                    onKeyDown={event => {
+                      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                      const heights = readTimeBlockHeights();
+                      if (!heights) return;
+                      event.preventDefault();
+                      const next = resizeTimeBlocks(heights, divider, event.key === 'ArrowUp' ? -12 : 12);
+                      if (next[divider] !== heights[divider]) void updateRowHeights(next);
+                    }}
+                  />
+                ))}
+              </div>
+
               {/* Right: Notes - desktop only */}
               {!isMobile && (
                 <div 
@@ -529,7 +618,7 @@ export function WeeklyView({ accountMenu }: { accountMenu?: React.ReactNode }) {
               )}
             </div>
 
-            <DragOverlay>
+            <DragOverlay dropAnimation={null}>
               {activeTask ? (
                 <div className="bg-background border border-primary shadow-lg rounded px-2 py-1 text-sm">
                   {activeTask.content}

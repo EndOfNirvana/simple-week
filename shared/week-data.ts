@@ -1,4 +1,6 @@
 export type DailyEntries = Record<string, string>;
+export type TimeBlockHeights = [number, number, number];
+export const MIN_TIME_BLOCK_HEIGHT = 64;
 
 export function parseDailyEntries(value: string | null | undefined): DailyEntries {
   if (!value) return {};

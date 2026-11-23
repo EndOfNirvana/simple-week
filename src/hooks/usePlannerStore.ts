@@ -3,7 +3,7 @@ import { TimeBlock, Task } from '../lib/types';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { useMemo, useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { moveTaskWithinWeek } from '../../shared/week-data';
+import { MIN_TIME_BLOCK_HEIGHT, moveTaskWithinWeek, type TimeBlockHeights } from '../../shared/week-data';
 import { getWeekId } from '../../shared/week-id';
 
 // Default column width
@@ -48,6 +48,7 @@ export function usePlannerStore(currentDate: Date) {
     }
   );
   const [titleDrafts, setTitleDrafts] = useState<Record<string, { text: string }>>({});
+  const [rowHeightDrafts, setRowHeightDrafts] = useState<Record<string, TimeBlockHeights>>({});
   const titleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   // Mutations with optimistic updates
@@ -196,6 +197,14 @@ export function usePlannerStore(currentDate: Date) {
     },
   });
 
+  const { mutateAsync: saveRowHeights } = trpc.weekSettings.updateRowHeights.useMutation({
+    scope: { id: 'week-row-heights' },
+    onMutate: ({ weekId }) => utils.weekSettings.get.cancel({ weekId }),
+    onSuccess: (settings, { weekId }) => {
+      utils.weekSettings.get.setData({ weekId }, old => old ? { ...old, rowHeights: settings.rowHeights } : settings);
+    },
+  });
+
   const updateCustomContentMutation = trpc.weekSettings.updateCustomContent.useMutation({
     scope: { id: 'week-custom-content' },
     onMutate: async ({ weekId, customText, customImageUrl }) => {
@@ -247,6 +256,17 @@ export function usePlannerStore(currentDate: Date) {
     }
     return defaultWidths;
   }, [weekSettingsQuery.data?.columnWidths]);
+
+  const savedRowHeights = useMemo((): TimeBlockHeights | null => {
+    if (!weekSettingsQuery.data?.rowHeights) return null;
+    try {
+      const heights = JSON.parse(weekSettingsQuery.data.rowHeights);
+      const values: TimeBlockHeights = [heights?.[0], heights?.[1], heights?.[2]];
+      return values.every(height => Number.isInteger(height) && height >= MIN_TIME_BLOCK_HEIGHT) ? values : null;
+    } catch {
+      return null;
+    }
+  }, [weekSettingsQuery.data?.rowHeights]);
 
   // Custom content from settings
   // An empty saved title is an explicit clear. Only missing titles fall back to legacy keywords.
@@ -324,6 +344,22 @@ export function usePlannerStore(currentDate: Date) {
     updateCustomContentMutation.mutate({ weekId, customImageUrl: null });
   }, [weekId, updateCustomContentMutation]);
 
+  const updateRowHeights = useCallback(async (heights: TimeBlockHeights) => {
+    setRowHeightDrafts(current => ({ ...current, [weekId]: heights }));
+    try {
+      await saveRowHeights({ weekId, rowHeights: heights });
+    } catch {
+      toast.error('时段高度保存失败，请重试');
+    } finally {
+      setRowHeightDrafts(current => {
+        if (current[weekId] !== heights) return current;
+        const next = { ...current };
+        delete next[weekId];
+        return next;
+      });
+    }
+  }, [saveRowHeights, weekId]);
+
   return {
     tasks: tasksQuery.data ?? [],
     note: noteQuery.data,
@@ -337,6 +373,8 @@ export function usePlannerStore(currentDate: Date) {
     weekId,
     columnWidths,
     updateColumnWidth,
+    rowHeights: rowHeightDrafts[weekId] ?? savedRowHeights,
+    updateRowHeights,
     customText,
     customImageUrl,
     updateCustomText,

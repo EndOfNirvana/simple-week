@@ -5,6 +5,8 @@ import { Task } from '../lib/types';
 import { Check, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
+const skipDropTransition = () => false;
+
 interface DraggableTaskItemProps {
   task: Task;
   onToggle: (id: number) => void;
@@ -25,7 +27,7 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onUpdate }: Dragga
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({ id: task.id, animateLayoutChanges: skipDropTransition });
 
   const style = {
     transform: CSS.Transform.toString(transform),

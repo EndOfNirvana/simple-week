@@ -83,7 +83,7 @@ export const weekSettings = pgTable("week_settings", {
   weekId: varchar("week_id", { length: 10 }).notNull(),
   /** Column widths as JSON string: {"0": 150, "1": 200, ...} for each day index */
   columnWidths: text("column_widths"),
-  /** Row heights as JSON string (for future use) */
+  /** Relative heights of the three time blocks, stored as JSON. */
   rowHeights: text("row_heights"),
   /** Custom content text */
   customText: text("custom_text"),

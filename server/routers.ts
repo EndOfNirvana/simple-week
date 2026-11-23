@@ -4,8 +4,10 @@ import { getTasksForWeek, createTask, moveTask, updateTask, deleteTask, getNoteF
 import { uploadToR2 } from "./storage";
 import { nanoid } from "nanoid";
 import { getLegacyWeekStarts, isWeekStartId } from "../shared/week-id";
+import { MIN_TIME_BLOCK_HEIGHT } from "../shared/week-data";
 
 const timeBlockSchema = z.enum(["morning", "afternoon", "evening"]);
+const timeBlockHeight = z.number().int().min(MIN_TIME_BLOCK_HEIGHT);
 const writableWeekId = z.string().refine(
   weekId => isWeekStartId(weekId) || getLegacyWeekStarts(weekId).length === 1,
   "无法确定该周的日期，请刷新后重试"
@@ -144,6 +146,13 @@ export const appRouter = router({
         }
         return upsertWeekSettings(ctx.user.id, input.weekId, columnWidths);
       }),
+
+    updateRowHeights: protectedProcedure
+      .input(z.object({
+        weekId: writableWeekId,
+        rowHeights: z.tuple([timeBlockHeight, timeBlockHeight, timeBlockHeight]),
+      }))
+      .mutation(({ ctx, input }) => upsertWeekSettings(ctx.user.id, input.weekId, undefined, input.rowHeights)),
 
     // Update custom content (text and/or image)
     updateCustomContent: protectedProcedure
